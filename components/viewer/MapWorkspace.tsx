@@ -1,0 +1,1456 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Map as LeafletMap, TileLayer } from "leaflet";
+import {
+  AlertTriangle,
+  Check,
+  Crop,
+  Crosshair,
+  Download,
+  EyeOff,
+  Layers,
+  LocateFixed,
+  MapPin,
+  Minus,
+  Plus,
+  ScanLine,
+  SlidersHorizontal,
+  TrendingDown,
+} from "lucide-react";
+import { decodeValue } from "@/lib/isoxml/value-decoder";
+import {
+  geographicCellBounds,
+  geographicCellCenter,
+  geographicGridBounds,
+  gridCellAreaSquareMeters,
+  gridCellDimensionsMeters,
+  gridCellIndexAt,
+  gridCellRangeForBounds,
+  isSpatialGridValid,
+} from "@/lib/isoxml/spatial";
+import { downloadBlob } from "@/lib/isoxml/export";
+import { copyTextToClipboard } from "@/lib/client/clipboard";
+import { buildMapChannelValues } from "@/lib/isoxml/map-channel-model";
+import { calculateDoseStatistics } from "@/lib/isoxml/dose-statistics";
+import {
+  classIndexForValue,
+  classifyValues,
+  type ValueClassification,
+} from "@/lib/isoxml/value-classification";
+import type {
+  DecodedGrid,
+  GridChannel,
+  IsoXmlDataset,
+  SpatialBoundary,
+} from "@/lib/isoxml/types";
+import { useViewerStore } from "./store";
+
+const colorStops = [
+  "#233f52",
+  "#27696a",
+  "#3c8c6e",
+  "#7aaa65",
+  "#c5c85b",
+  "#f0b64b",
+  "#e67c36",
+];
+const ZOOM_STEP = 0.25;
+const MAX_PAINTED_CELL_BLOCKS = 60_000;
+
+function formatCellArea(area: number): string {
+  if (area >= 100) return Math.round(area).toString();
+  if (area >= 10) return area.toFixed(1).replace(/\.0$/, "");
+  return area.toFixed(2).replace(/\.?0+$/, "");
+}
+
+function formatCellLength(length: number): string {
+  if (length >= 10) return length.toFixed(1).replace(/\.0$/, "");
+  return length.toFixed(2).replace(/\.?0+$/, "");
+}
+
+function formatMapStatistic(value: number, preferredDecimals: number): string {
+  const decimals = Math.min(4, Math.max(0, preferredDecimals));
+  return value.toLocaleString("en-US", {
+    maximumFractionDigits: decimals,
+    minimumFractionDigits: Math.min(2, decimals),
+  });
+}
+
+function hexToRgb(hex: string): [number, number, number] {
+  const clean = hex.replace("#", "");
+  return [
+    Number.parseInt(clean.slice(0, 2), 16),
+    Number.parseInt(clean.slice(2, 4), 16),
+    Number.parseInt(clean.slice(4, 6), 16),
+  ];
+}
+
+function interpolatedColor(ratio: number): string {
+  const scaled = ratio * (colorStops.length - 1);
+  const index = Math.min(colorStops.length - 2, Math.floor(scaled));
+  const t = scaled - index;
+  const left = hexToRgb(colorStops[index]);
+  const right = hexToRgb(colorStops[index + 1]);
+  return `rgb(${left.map((component, part) => Math.round(component + (right[part] - component) * t)).join(",")})`;
+}
+
+function colorsForClasses(classCount: number): string[] {
+  if (classCount <= 0) return [];
+  if (classCount === 1) return [interpolatedColor(0.5)];
+  return Array.from({ length: classCount }, (_, index) =>
+    interpolatedColor(index / (classCount - 1)),
+  );
+}
+
+function colorFor(
+  value: number,
+  classification: ValueClassification,
+  classColors: readonly string[],
+): string {
+  const classIndex = classIndexForValue(value, classification);
+  return classIndex === undefined ? "#3c4541" : classColors[classIndex];
+}
+
+function scaleDescription(classification: ValueClassification): string {
+  if (!classification.classCount) return "No numeric values";
+  const classLabel = classification.classCount === 1 ? "class" : "classes";
+  const method =
+    classification.mode === "distinct-values"
+      ? "Distinct values"
+      : "Equal interval";
+  return `${method} · ${classification.classCount} ${classLabel}`;
+}
+
+function fieldBoundaryForGrid(
+  dataset: IsoXmlDataset,
+  grid: DecodedGrid,
+): SpatialBoundary | undefined {
+  const task = dataset.tasks.find(
+    (candidate) => candidate.instanceId === grid.taskInstanceId,
+  );
+  const taskObject = task
+    ? dataset.objects.find((object) => object.uid === task.objectUid)
+    : undefined;
+  const fieldId =
+    taskObject?.attributes.E ??
+    taskObject?.attributes.PartfieldIdRef ??
+    taskObject?.attributes.PartFieldIdRef;
+
+  return (
+    dataset.boundaries.find((boundary) => boundary.taskId === grid.taskId) ??
+    dataset.boundaries.find((boundary) => boundary.id === fieldId) ??
+    (dataset.boundaries.length === 1 ? dataset.boundaries[0] : undefined)
+  );
+}
+
+function traceBoundaryPath(
+  context: CanvasRenderingContext2D,
+  map: LeafletMap,
+  boundary: SpatialBoundary,
+): void {
+  context.beginPath();
+  boundary.coordinates.forEach(([latitude, longitude], index) => {
+    const point = map.latLngToContainerPoint([latitude, longitude]);
+    if (index === 0) context.moveTo(point.x, point.y);
+    else context.lineTo(point.x, point.y);
+  });
+  context.closePath();
+}
+
+function pointIsInsideBoundary(
+  latitude: number,
+  longitude: number,
+  boundary: SpatialBoundary,
+): boolean {
+  let inside = false;
+  const points = boundary.coordinates;
+  for (
+    let index = 0, previous = points.length - 1;
+    index < points.length;
+    previous = index, index += 1
+  ) {
+    const [currentLatitude, currentLongitude] = points[index];
+    const [previousLatitude, previousLongitude] = points[previous];
+    const crossesLatitude =
+      currentLatitude > latitude !== previousLatitude > latitude;
+    const crossingLongitude =
+      ((previousLongitude - currentLongitude) * (latitude - currentLatitude)) /
+        (previousLatitude - currentLatitude) +
+      currentLongitude;
+    if (crossesLatitude && longitude < crossingLongitude) inside = !inside;
+  }
+  return inside;
+}
+
+function fittedCanvasText(
+  context: CanvasRenderingContext2D,
+  value: string,
+  maxWidth: number,
+): string {
+  if (context.measureText(value).width <= maxWidth) return value;
+  let fitted = value;
+  while (
+    fitted.length > 1 &&
+    context.measureText(`${fitted}…`).width > maxWidth
+  ) {
+    fitted = fitted.slice(0, -1);
+  }
+  return `${fitted}…`;
+}
+
+function drawExportLegend(
+  context: CanvasRenderingContext2D,
+  width: number,
+  channel: GridChannel,
+  grid: DecodedGrid,
+  min: number,
+  max: number,
+  visibleCellCount: number,
+  filteredCellCount: number,
+  zeroCount: number,
+  noDataCount: number,
+  classColors: readonly string[],
+  scaleLabel: string,
+  averageDose: string | undefined,
+  totalDose: string | undefined,
+): void {
+  const panelWidth = Math.min(240, width - 28);
+  const doseRowCount =
+    Number(Boolean(averageDose)) + Number(Boolean(totalDose));
+  const panelHeight = 205 + doseRowCount * 19;
+  const x = Math.max(14, width - panelWidth - 14);
+  const y = 14;
+  const innerX = x + 13;
+  const innerWidth = panelWidth - 26;
+
+  context.save();
+  context.globalAlpha = 1;
+  context.fillStyle = "rgba(10, 19, 16, 0.92)";
+  context.fillRect(x, y, panelWidth, panelHeight);
+  context.strokeStyle = "rgba(197, 214, 204, 0.28)";
+  context.lineWidth = 1;
+  context.strokeRect(x + 0.5, y + 0.5, panelWidth - 1, panelHeight - 1);
+
+  context.fillStyle = "#b5d779";
+  context.fillRect(innerX, y + 13, 8, 8);
+  context.fillStyle = "#8f9d96";
+  context.font = '8px Consolas, "SFMono-Regular", monospace';
+  context.textBaseline = "top";
+  context.fillText("PLANNED · ACTIVE", innerX + 14, y + 13);
+
+  context.fillStyle = "#dce5df";
+  context.font = "600 14px Inter, Arial, sans-serif";
+  context.fillText(
+    fittedCanvasText(
+      context,
+      channel.productName ?? "Product unresolved",
+      innerWidth,
+    ),
+    innerX,
+    y + 37,
+  );
+  context.fillStyle = "#9caaa3";
+  context.font = "9px Inter, Arial, sans-serif";
+  context.fillText(
+    fittedCanvasText(
+      context,
+      `DDI ${channel.ddiDisplay} · ${channel.ddiName}`,
+      innerWidth,
+    ),
+    innerX,
+    y + 57,
+  );
+
+  const rampY = y + 78;
+  const segmentWidth = classColors.length
+    ? innerWidth / classColors.length
+    : innerWidth;
+  classColors.forEach((color, index) => {
+    context.fillStyle = color;
+    context.fillRect(
+      innerX + segmentWidth * index,
+      rampY,
+      segmentWidth + 0.25,
+      10,
+    );
+  });
+
+  context.font = '8px Consolas, "SFMono-Regular", monospace';
+  context.fillStyle = "#85948c";
+  context.textAlign = "left";
+  context.fillText(
+    min.toFixed(channel.presentation.decimals),
+    innerX,
+    rampY + 13,
+  );
+  context.textAlign = "right";
+  context.fillText(
+    max.toFixed(channel.presentation.decimals),
+    innerX + innerWidth,
+    rampY + 13,
+  );
+  context.fillStyle = "#c9d5ce";
+  context.textAlign = "center";
+  context.fillText(
+    fittedCanvasText(context, channel.unit ?? "unit unknown", innerWidth / 2),
+    innerX + innerWidth / 2,
+    rampY + 13,
+  );
+
+  const ruleY = y + 109.5;
+  context.strokeStyle = "rgba(197, 214, 204, 0.16)";
+  context.beginPath();
+  context.moveTo(innerX, ruleY);
+  context.lineTo(innerX + innerWidth, ruleY);
+  context.stroke();
+
+  const rows = [
+    ["Scale", scaleLabel],
+    ...(averageDose ? [["Average dose", averageDose]] : []),
+    ...(totalDose ? [["Total dose", totalDose]] : []),
+    ["Visible / filtered", `${visibleCellCount} / ${filteredCellCount}`],
+    ["Zero / no-data", `${zeroCount} / ${noDataCount}`],
+    ["Source", grid.filename],
+  ];
+  context.font = "10px Inter, Arial, sans-serif";
+  rows.forEach(([label, value], index) => {
+    const rowY = y + 122 + index * 19;
+    context.fillStyle = "#7f8d86";
+    context.textAlign = "left";
+    context.fillText(label, innerX, rowY);
+    const labelWidth = context.measureText(label).width;
+    context.fillStyle = "#c9d4ce";
+    context.font = '10px Consolas, "SFMono-Regular", monospace';
+    context.textAlign = "right";
+    context.fillText(
+      fittedCanvasText(context, value, innerWidth - labelWidth - 10),
+      innerX + innerWidth,
+      rowY,
+    );
+    context.font = "10px Inter, Arial, sans-serif";
+  });
+  context.restore();
+}
+
+function canvasBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error("The map image could not be encoded."));
+    }, "image/png");
+  });
+}
+
+interface MapWorkspaceProps {
+  dataset: IsoXmlDataset;
+  grid: DecodedGrid;
+  channel: GridChannel;
+}
+
+export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<LeafletMap | undefined>(undefined);
+  const mapReadyRef = useRef(false);
+  const gridRef = useRef(grid);
+  const canvasRef = useRef<HTMLCanvasElement | undefined>(undefined);
+  const tileLayerRef = useRef<TileLayer | undefined>(undefined);
+  const leafletRef = useRef<typeof import("leaflet") | undefined>(undefined);
+  const drawRef = useRef<() => void>(() => {});
+  const hiddenCellMaskRef = useRef<Uint8Array>(new Uint8Array());
+  const fieldClipRef = useRef<{
+    enabled: boolean;
+    boundary?: SpatialBoundary;
+  }>({ enabled: false });
+  const displayFilterControlRef = useRef<HTMLDivElement>(null);
+  const baseLayerControlRef = useRef<HTMLDivElement>(null);
+  const renderModeLabelRef = useRef<HTMLSpanElement>(null);
+  const pinnedLatLngRef = useRef<
+    { latitude: number; longitude: number } | undefined
+  >(undefined);
+  const [liveCoordinate, setLiveCoordinate] = useState(() =>
+    isSpatialGridValid(grid)
+      ? `${grid.origin.latitude.toFixed(6)}, ${grid.origin.longitude.toFixed(6)}`
+      : "Coordinates unavailable",
+  );
+  const [pinnedCoordinate, setPinnedCoordinate] = useState<string>();
+  const [pinnedScreenPosition, setPinnedScreenPosition] = useState<{
+    x: number;
+    y: number;
+  }>();
+  const [hoverPosition, setHoverPosition] = useState<{
+    x: number;
+    y: number;
+  }>();
+  const [baseLayerMenuOpen, setBaseLayerMenuOpen] = useState(false);
+  const [displayFilterMenuOpen, setDisplayFilterMenuOpen] = useState(false);
+  const [mapExportError, setMapExportError] = useState<string>();
+  const selectedCellIndex = useViewerStore((state) => state.selectedCellIndex);
+  const hoveredCellIndex = useViewerStore((state) => state.hoveredCellIndex);
+  const setSelectedCell = useViewerStore((state) => state.setSelectedCell);
+  const setHoveredCell = useViewerStore((state) => state.setHoveredCell);
+  const baseLayer = useViewerStore((state) => state.baseLayer);
+  const setBaseLayer = useViewerStore((state) => state.setBaseLayer);
+  const hideEmptyCells = useViewerStore((state) => state.hideEmptyCells);
+  const setHideEmptyCells = useViewerStore((state) => state.setHideEmptyCells);
+  const hideOutliers = useViewerStore((state) => state.hideOutliers);
+  const setHideOutliers = useViewerStore((state) => state.setHideOutliers);
+  const clipToField = useViewerStore((state) => state.clipToField);
+  const setClipToField = useViewerStore((state) => state.setClipToField);
+  const mapFitNonce = useViewerStore((state) => state.mapFitNonce);
+  const initialBaseLayerRef = useRef(baseLayer);
+  const spatiallyValid = isSpatialGridValid(grid);
+  const fieldBoundary = useMemo(
+    () => fieldBoundaryForGrid(dataset, grid),
+    [dataset, grid],
+  );
+  const fieldClipActive = clipToField && Boolean(fieldBoundary);
+  const activeDisplayFilterCount =
+    Number(hideEmptyCells) + Number(hideOutliers) + Number(fieldClipActive);
+
+  useEffect(() => {
+    gridRef.current = grid;
+  }, [grid]);
+
+  useEffect(() => {
+    if (!baseLayerMenuOpen && !displayFilterMenuOpen) return;
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      const target = event.target as Node;
+      const clickedInsideOpenMenu = displayFilterMenuOpen
+        ? displayFilterControlRef.current?.contains(target)
+        : baseLayerControlRef.current?.contains(target);
+      if (!clickedInsideOpenMenu) {
+        setBaseLayerMenuOpen(false);
+        setDisplayFilterMenuOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setBaseLayerMenuOpen(false);
+      setDisplayFilterMenuOpen(false);
+    };
+    window.addEventListener("pointerdown", closeOnOutsideClick);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("pointerdown", closeOnOutsideClick);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [baseLayerMenuOpen, displayFilterMenuOpen]);
+
+  const channelIndex = grid.channels.findIndex(
+    (candidate) => candidate.channelId === channel.channelId,
+  );
+  const {
+    numericValueByCell,
+    emptyCells,
+    noDataCells,
+    zeroCells,
+    outlierCells,
+  } = useMemo(
+    () =>
+      buildMapChannelValues(
+        grid.rawValues[channelIndex],
+        grid.decodedCellCount,
+        channel.presentation,
+      ),
+    [channel.presentation, channelIndex, grid.decodedCellCount, grid.rawValues],
+  );
+  const hiddenCellMask = useMemo(() => {
+    const result = new Uint8Array(numericValueByCell.length);
+    result.forEach((_, index) => {
+      if (
+        (hideEmptyCells && emptyCells[index]) ||
+        (hideOutliers && outlierCells[index])
+      ) {
+        result[index] = 1;
+      }
+    });
+    return result;
+  }, [
+    emptyCells,
+    hideEmptyCells,
+    hideOutliers,
+    numericValueByCell.length,
+    outlierCells,
+  ]);
+
+  useEffect(() => {
+    hiddenCellMaskRef.current = hiddenCellMask;
+  }, [hiddenCellMask]);
+
+  useEffect(() => {
+    fieldClipRef.current = {
+      enabled: fieldClipActive,
+      boundary: fieldBoundary,
+    };
+  }, [fieldBoundary, fieldClipActive]);
+
+  const outsideFieldCellMask = useMemo(() => {
+    if (!fieldClipActive || !fieldBoundary || !spatiallyValid) {
+      return new Uint8Array(numericValueByCell.length);
+    }
+    const result = new Uint8Array(numericValueByCell.length);
+    result.forEach((_, index) => {
+      const center = geographicCellCenter(
+        grid,
+        Math.floor(index / grid.columns),
+        index % grid.columns,
+      );
+      if (
+        !center ||
+        !pointIsInsideBoundary(center.latitude, center.longitude, fieldBoundary)
+      ) {
+        result[index] = 1;
+      }
+    });
+    return result;
+  }, [
+    fieldBoundary,
+    fieldClipActive,
+    grid,
+    numericValueByCell.length,
+    spatiallyValid,
+  ]);
+  const legendFilteredCellMask = useMemo(() => {
+    const result = new Uint8Array(hiddenCellMask.length);
+    result.forEach((_, index) => {
+      if (hiddenCellMask[index] || outsideFieldCellMask[index]) {
+        result[index] = 1;
+      }
+    });
+    return result;
+  }, [hiddenCellMask, outsideFieldCellMask]);
+
+  const valueClassification = useMemo(
+    () => classifyValues(numericValueByCell, 10, legendFilteredCellMask),
+    [legendFilteredCellMask, numericValueByCell],
+  );
+  const classColors = useMemo(
+    () => colorsForClasses(valueClassification.classCount),
+    [valueClassification.classCount],
+  );
+  const scaleLabel = scaleDescription(valueClassification);
+  const min = valueClassification.min;
+  const max = valueClassification.max;
+  const zeroCount = zeroCells.filter(
+    (isZero, index) => isZero && !outsideFieldCellMask[index],
+  ).length;
+  const outlierCount = outlierCells.filter(Boolean).length;
+  const noDataCount =
+    noDataCells.filter(Boolean).length +
+    Math.max(0, grid.expectedCellCount - grid.decodedCellCount);
+  const filteredCellCount = legendFilteredCellMask.filter(Boolean).length;
+  const visibleCellCount = grid.decodedCellCount - filteredCellCount;
+  const cellAreaSquareMeters = gridCellAreaSquareMeters(grid);
+  const cellDimensionsMeters = gridCellDimensionsMeters(grid);
+  const doseStatistics = useMemo(
+    () =>
+      calculateDoseStatistics(
+        numericValueByCell,
+        cellAreaSquareMeters,
+        channel.unit,
+        legendFilteredCellMask,
+      ),
+    [
+      cellAreaSquareMeters,
+      channel.unit,
+      legendFilteredCellMask,
+      numericValueByCell,
+    ],
+  );
+  const averageDose =
+    doseStatistics.average === undefined
+      ? undefined
+      : `${formatMapStatistic(
+          doseStatistics.average,
+          channel.presentation.decimals,
+        )}${doseStatistics.averageUnit ? ` ${doseStatistics.averageUnit}` : ""}`;
+  const totalDose =
+    doseStatistics.total === undefined
+      ? undefined
+      : `${formatMapStatistic(
+          doseStatistics.total,
+          channel.presentation.decimals,
+        )}${doseStatistics.totalUnit ? ` ${doseStatistics.totalUnit}` : ""}`;
+  const hoveredRawValue =
+    hoveredCellIndex !== undefined
+      ? grid.rawValues[channelIndex]?.[hoveredCellIndex]
+      : undefined;
+  const hoveredValue =
+    hoveredRawValue === undefined
+      ? undefined
+      : decodeValue(hoveredRawValue, channel.presentation);
+
+  const paintDataLayer = useCallback(
+    (
+      context: CanvasRenderingContext2D,
+      map: LeafletMap,
+      includeSelection: boolean,
+    ) => {
+      context.save();
+      if (fieldClipActive && fieldBoundary) {
+        traceBoundaryPath(context, map, fieldBoundary);
+        context.clip();
+      }
+      const mapBounds = map.getBounds();
+      const visibleRange = gridCellRangeForBounds(grid, {
+        north: mapBounds.getNorth(),
+        south: mapBounds.getSouth(),
+        east: mapBounds.getEast(),
+        west: mapBounds.getWest(),
+      });
+      const visibleRows = visibleRange
+        ? visibleRange.lastRow - visibleRange.firstRow + 1
+        : 0;
+      const visibleColumns = visibleRange
+        ? visibleRange.lastColumn - visibleRange.firstColumn + 1
+        : 0;
+      const renderStride = Math.max(
+        1,
+        Math.ceil(
+          Math.sqrt((visibleRows * visibleColumns) / MAX_PAINTED_CELL_BLOCKS),
+        ),
+      );
+      if (renderModeLabelRef.current) {
+        renderModeLabelRef.current.textContent =
+          renderStride > 1
+            ? `SAMPLED ${renderStride}×${renderStride}`
+            : "CANVAS";
+      }
+      for (
+        let row = visibleRange?.firstRow ?? 0;
+        row <= (visibleRange?.lastRow ?? -1);
+        row += renderStride
+      ) {
+        for (
+          let column = visibleRange?.firstColumn ?? 0;
+          column <= (visibleRange?.lastColumn ?? -1);
+          column += renderStride
+        ) {
+          const sampleRow = Math.min(
+            row + Math.floor(renderStride / 2),
+            visibleRange?.lastRow ?? row,
+          );
+          const sampleColumn = Math.min(
+            column + Math.floor(renderStride / 2),
+            visibleRange?.lastColumn ?? column,
+          );
+          const index = sampleRow * grid.columns + sampleColumn;
+          if (index >= grid.decodedCellCount || hiddenCellMask[index]) continue;
+          const firstBounds = geographicCellBounds(grid, row, column);
+          const lastBounds = geographicCellBounds(
+            grid,
+            Math.min(row + renderStride - 1, grid.rows - 1),
+            Math.min(column + renderStride - 1, grid.columns - 1),
+          );
+          if (!firstBounds || !lastBounds) continue;
+          const north = Math.max(firstBounds.north, lastBounds.north);
+          const south = Math.min(firstBounds.south, lastBounds.south);
+          const west = Math.min(firstBounds.west, lastBounds.west);
+          const east = Math.max(firstBounds.east, lastBounds.east);
+          const topLeft = map.latLngToContainerPoint([north, west]);
+          const bottomRight = map.latLngToContainerPoint([south, east]);
+          const width = bottomRight.x - topLeft.x;
+          const height = bottomRight.y - topLeft.y;
+          context.fillStyle = noDataCells[index]
+            ? "#3c4541"
+            : colorFor(
+                numericValueByCell[index],
+                valueClassification,
+                classColors,
+              );
+          context.globalAlpha = 0.88;
+          context.fillRect(topLeft.x, topLeft.y, width + 0.35, height + 0.35);
+          context.strokeStyle = "rgba(8, 18, 16, 0.34)";
+          context.lineWidth = 0.7;
+          context.strokeRect(topLeft.x, topLeft.y, width, height);
+        }
+      }
+      if (
+        includeSelection &&
+        selectedCellIndex !== undefined &&
+        !hiddenCellMask[selectedCellIndex]
+      ) {
+        const selectedBounds = geographicCellBounds(
+          grid,
+          Math.floor(selectedCellIndex / grid.columns),
+          selectedCellIndex % grid.columns,
+        );
+        if (selectedBounds) {
+          const topLeft = map.latLngToContainerPoint([
+            selectedBounds.north,
+            selectedBounds.west,
+          ]);
+          const bottomRight = map.latLngToContainerPoint([
+            selectedBounds.south,
+            selectedBounds.east,
+          ]);
+          const width = bottomRight.x - topLeft.x;
+          const height = bottomRight.y - topLeft.y;
+          context.globalAlpha = 1;
+          context.strokeStyle = "#f3f7ed";
+          context.lineWidth = 2;
+          context.strokeRect(
+            topLeft.x + 1,
+            topLeft.y + 1,
+            width - 2,
+            height - 2,
+          );
+          context.strokeStyle = "#0b1411";
+          context.lineWidth = 1;
+          context.strokeRect(
+            topLeft.x + 3,
+            topLeft.y + 3,
+            width - 6,
+            height - 6,
+          );
+        }
+      }
+      context.restore();
+
+      context.save();
+      for (const boundary of dataset.boundaries) {
+        if (boundary.coordinates.length < 2) continue;
+        traceBoundaryPath(context, map, boundary);
+        context.globalAlpha = 1;
+        context.strokeStyle = "#d5e59d";
+        context.setLineDash([7, 5]);
+        context.lineWidth = 1.6;
+        context.stroke();
+        context.setLineDash([]);
+      }
+      context.restore();
+    },
+    [
+      dataset.boundaries,
+      fieldBoundary,
+      fieldClipActive,
+      grid,
+      hiddenCellMask,
+      classColors,
+      noDataCells,
+      numericValueByCell,
+      selectedCellIndex,
+      valueClassification,
+    ],
+  );
+
+  const draw = useCallback(() => {
+    const map = mapRef.current;
+    const canvas = canvasRef.current;
+    if (!map || !canvas) return;
+    const size = map.getSize();
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = size.x * ratio;
+    canvas.height = size.y * ratio;
+    canvas.style.width = `${size.x}px`;
+    canvas.style.height = `${size.y}px`;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    context.clearRect(0, 0, size.x, size.y);
+    paintDataLayer(context, map, true);
+  }, [paintDataLayer]);
+
+  const fitGrid = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || !mapReadyRef.current) return;
+    const bounds = geographicGridBounds(grid);
+    if (!bounds) return;
+    map.stop();
+    map.fitBounds(bounds, {
+      padding: [54, 54],
+      animate: false,
+    });
+  }, [grid]);
+
+  useEffect(() => {
+    drawRef.current = draw;
+    draw();
+  }, [draw]);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    let disposed = false;
+    void import("leaflet").then((leaflet) => {
+      if (disposed || !containerRef.current) return;
+      leafletRef.current = leaflet;
+      const activeGrid = gridRef.current;
+      setLiveCoordinate(
+        isSpatialGridValid(activeGrid)
+          ? `${activeGrid.origin.latitude.toFixed(6)}, ${activeGrid.origin.longitude.toFixed(6)}`
+          : "Coordinates unavailable",
+      );
+      const map = leaflet.map(containerRef.current, {
+        zoomControl: false,
+        attributionControl: true,
+        minZoom: 3,
+        maxZoom: 21,
+        zoomSnap: ZOOM_STEP,
+        zoomDelta: ZOOM_STEP,
+        zoomAnimation: false,
+        fadeAnimation: false,
+        markerZoomAnimation: false,
+        inertia: false,
+      });
+      mapRef.current = map;
+      const bounds = geographicGridBounds(activeGrid);
+      if (bounds) {
+        map.fitBounds(bounds, { padding: [54, 54], animate: false });
+      } else map.setView([20, 0], 2);
+      mapReadyRef.current = true;
+      const syncMapZoom = () => {
+        if (containerRef.current) {
+          containerRef.current.dataset.mapZoom = map.getZoom().toFixed(2);
+        }
+      };
+      map.on("zoomend", syncMapZoom);
+      syncMapZoom();
+      leaflet.control
+        .scale({ imperial: false, position: "bottomleft" })
+        .addTo(map);
+      if (initialBaseLayerRef.current === "streets") {
+        tileLayerRef.current = leaflet
+          .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: "© OpenStreetMap contributors",
+            crossOrigin: true,
+            maxZoom: 19,
+          })
+          .addTo(map);
+        tileLayerRef.current.bringToBack();
+      } else if (initialBaseLayerRef.current === "satellite") {
+        tileLayerRef.current = leaflet
+          .tileLayer(
+            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+            {
+              attribution:
+                "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+              crossOrigin: true,
+              maxZoom: 19,
+            },
+          )
+          .addTo(map);
+        tileLayerRef.current.bringToBack();
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.className = "map-data-canvas";
+      canvas.setAttribute("aria-hidden", "true");
+      containerRef.current.appendChild(canvas);
+      canvasRef.current = canvas;
+
+      const redraw = () => {
+        drawRef.current();
+        const pinnedLatLng = pinnedLatLngRef.current;
+        if (!pinnedLatLng) return;
+        const point = map.latLngToContainerPoint([
+          pinnedLatLng.latitude,
+          pinnedLatLng.longitude,
+        ]);
+        setPinnedScreenPosition((current) =>
+          current && current.x === point.x && current.y === point.y
+            ? current
+            : { x: point.x, y: point.y },
+        );
+      };
+      map.on("move zoom resize", redraw);
+      map.on("mousemove", (event) => {
+        const activeEventGrid = gridRef.current;
+        const candidateIndex = gridCellIndexAt(
+          activeEventGrid,
+          event.latlng.lat,
+          event.latlng.lng,
+        );
+        const hiddenCells = hiddenCellMaskRef.current;
+        const { enabled, boundary } = fieldClipRef.current;
+        const insideField =
+          !enabled ||
+          !boundary ||
+          pointIsInsideBoundary(event.latlng.lat, event.latlng.lng, boundary);
+        const index =
+          candidateIndex !== undefined &&
+          !hiddenCells[candidateIndex] &&
+          insideField
+            ? candidateIndex
+            : undefined;
+        setHoveredCell(index);
+        setLiveCoordinate(
+          `${event.latlng.lat.toFixed(6)}, ${event.latlng.lng.toFixed(6)}`,
+        );
+        setHoverPosition(
+          index === undefined
+            ? undefined
+            : {
+                x: event.containerPoint.x + 14,
+                y: event.containerPoint.y + 14,
+              },
+        );
+      });
+      map.on("mouseout", () => {
+        setHoveredCell(undefined);
+        setHoverPosition(undefined);
+      });
+      map.on("click", (event) => {
+        pinnedLatLngRef.current = {
+          latitude: event.latlng.lat,
+          longitude: event.latlng.lng,
+        };
+        setPinnedCoordinate(
+          `${event.latlng.lat.toFixed(6)}, ${event.latlng.lng.toFixed(6)}`,
+        );
+        setPinnedScreenPosition({
+          x: event.containerPoint.x,
+          y: event.containerPoint.y,
+        });
+        const candidateIndex = gridCellIndexAt(
+          gridRef.current,
+          event.latlng.lat,
+          event.latlng.lng,
+        );
+        const hiddenCells = hiddenCellMaskRef.current;
+        const { enabled, boundary } = fieldClipRef.current;
+        const insideField =
+          !enabled ||
+          !boundary ||
+          pointIsInsideBoundary(event.latlng.lat, event.latlng.lng, boundary);
+        const index =
+          candidateIndex !== undefined &&
+          !hiddenCells[candidateIndex] &&
+          insideField
+            ? candidateIndex
+            : undefined;
+        if (index !== undefined) setSelectedCell(index);
+      });
+      requestAnimationFrame(redraw);
+    });
+
+    return () => {
+      disposed = true;
+      mapReadyRef.current = false;
+      tileLayerRef.current?.remove();
+      tileLayerRef.current = undefined;
+      mapRef.current?.off();
+      mapRef.current?.remove();
+      mapRef.current = undefined;
+      canvasRef.current = undefined;
+    };
+  }, [setHoveredCell, setSelectedCell]);
+
+  useEffect(() => {
+    const animationFrame = requestAnimationFrame(() => {
+      setLiveCoordinate(
+        spatiallyValid
+          ? `${grid.origin.latitude.toFixed(6)}, ${grid.origin.longitude.toFixed(6)}`
+          : "Coordinates unavailable",
+      );
+      pinnedLatLngRef.current = undefined;
+      setPinnedCoordinate(undefined);
+      setPinnedScreenPosition(undefined);
+      fitGrid();
+    });
+    return () => cancelAnimationFrame(animationFrame);
+  }, [fitGrid, grid.origin.latitude, grid.origin.longitude, spatiallyValid]);
+
+  useEffect(() => {
+    initialBaseLayerRef.current = baseLayer;
+    const map = mapRef.current;
+    const leaflet = leafletRef.current;
+    if (!map || !leaflet) return;
+    tileLayerRef.current?.remove();
+    tileLayerRef.current = undefined;
+    if (baseLayer === "streets") {
+      tileLayerRef.current = leaflet
+        .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution: "© OpenStreetMap contributors",
+          crossOrigin: true,
+          maxZoom: 19,
+        })
+        .addTo(map);
+      tileLayerRef.current.bringToBack();
+    } else if (baseLayer === "satellite") {
+      tileLayerRef.current = leaflet
+        .tileLayer(
+          "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+          {
+            attribution:
+              "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+            crossOrigin: true,
+            maxZoom: 19,
+          },
+        )
+        .addTo(map);
+      tileLayerRef.current.bringToBack();
+    }
+  }, [baseLayer]);
+
+  useEffect(() => {
+    if (mapFitNonce > 0) fitGrid();
+  }, [fitGrid, mapFitNonce]);
+
+  const exportMap = async () => {
+    try {
+      setMapExportError(undefined);
+      const container = containerRef.current;
+      const map = mapRef.current;
+      if (!container || !map) return;
+      const size = map.getSize();
+      const ratio = window.devicePixelRatio || 1;
+      const exportCanvas = document.createElement("canvas");
+      exportCanvas.width = size.x * ratio;
+      exportCanvas.height = size.y * ratio;
+      const context = exportCanvas.getContext("2d");
+      if (!context) return;
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+      const workspace = container.parentElement;
+      const workspaceStyle = workspace
+        ? window.getComputedStyle(workspace)
+        : undefined;
+      const background =
+        workspaceStyle?.getPropertyValue("--map").trim() || "#0b1918";
+      context.fillStyle = background;
+      context.fillRect(0, 0, size.x, size.y);
+      context.strokeStyle = workspace?.closest(".viewer-shell.light")
+        ? "rgba(36, 127, 114, 0.08)"
+        : "rgba(84, 176, 162, 0.06)";
+      context.lineWidth = 1;
+      for (let x = 24; x < size.x; x += 24) {
+        context.beginPath();
+        context.moveTo(x + 0.5, 0);
+        context.lineTo(x + 0.5, size.y);
+        context.stroke();
+      }
+      for (let y = 24; y < size.y; y += 24) {
+        context.beginPath();
+        context.moveTo(0, y + 0.5);
+        context.lineTo(size.x, y + 0.5);
+        context.stroke();
+      }
+
+      const containerBounds = container.getBoundingClientRect();
+      const tiles = Array.from(
+        container.querySelectorAll<HTMLImageElement>(".leaflet-tile-loaded"),
+      );
+      tiles.forEach((tile) => {
+        const tileBounds = tile.getBoundingClientRect();
+        if (!tile.complete || !tile.naturalWidth || !tileBounds.width) return;
+        context.drawImage(
+          tile,
+          tileBounds.left - containerBounds.left,
+          tileBounds.top - containerBounds.top,
+          tileBounds.width,
+          tileBounds.height,
+        );
+      });
+
+      paintDataLayer(context, map, false);
+      drawExportLegend(
+        context,
+        size.x,
+        channel,
+        grid,
+        min,
+        max,
+        visibleCellCount,
+        filteredCellCount,
+        zeroCount,
+        noDataCount,
+        classColors,
+        scaleLabel,
+        averageDose,
+        totalDose,
+      );
+
+      if (baseLayer !== "none") {
+        const attributionLines =
+          baseLayer === "streets"
+            ? ["© OpenStreetMap contributors"]
+            : [
+                "Tiles © Esri — Source: Esri, Maxar,",
+                "Earthstar Geographics, and the GIS User Community",
+              ];
+        context.save();
+        context.font = "8px Arial, sans-serif";
+        context.textAlign = "right";
+        context.textBaseline = "bottom";
+        const attributionWidth = Math.min(
+          Math.max(
+            ...attributionLines.map((line) => context.measureText(line).width),
+          ) + 10,
+          size.x,
+        );
+        const attributionHeight = attributionLines.length * 10 + 7;
+        context.fillStyle = "rgba(9, 17, 15, 0.76)";
+        context.fillRect(
+          size.x - attributionWidth,
+          size.y - attributionHeight,
+          attributionWidth,
+          attributionHeight,
+        );
+        context.fillStyle = "#c8d2cc";
+        attributionLines.forEach((line, index) => {
+          context.fillText(
+            fittedCanvasText(context, line, size.x - 10),
+            size.x - 5,
+            size.y - 4 - (attributionLines.length - index - 1) * 10,
+          );
+        });
+        context.restore();
+      }
+
+      const blob = await canvasBlob(exportCanvas);
+      downloadBlob(blob, `${grid.id}-${channel.ddiDisplay}-map.png`);
+    } catch (error) {
+      console.error("Map export failed.", error);
+      setMapExportError(
+        baseLayer === "none"
+          ? "The map image could not be exported."
+          : "The browser blocked pixels from the background map. Choose No background and try again.",
+      );
+    }
+  };
+
+  const hoveredRow =
+    hoveredCellIndex !== undefined
+      ? Math.floor(hoveredCellIndex / grid.columns)
+      : 0;
+  const hoveredColumn =
+    hoveredCellIndex !== undefined ? hoveredCellIndex % grid.columns : 0;
+
+  return (
+    <main className="map-workspace" aria-label="Interactive ISOXML map">
+      <div
+        className="map-container"
+        ref={containerRef}
+        data-testid="isoxml-map"
+      />
+      <div className="map-control-stack top-left">
+        <button
+          type="button"
+          onClick={() => mapRef.current?.zoomIn(ZOOM_STEP, { animate: false })}
+          aria-label="Zoom in"
+        >
+          <Plus size={16} />
+        </button>
+        <button
+          type="button"
+          onClick={() => mapRef.current?.zoomOut(ZOOM_STEP, { animate: false })}
+          aria-label="Zoom out"
+        >
+          <Minus size={16} />
+        </button>
+        <span />
+        <button type="button" onClick={fitGrid} aria-label="Fit active grid">
+          <Crosshair size={16} />
+        </button>
+        <div className="map-filter-control" ref={displayFilterControlRef}>
+          <button
+            type="button"
+            className={activeDisplayFilterCount ? "active" : ""}
+            aria-label={`Configure map display filters${activeDisplayFilterCount ? `: ${activeDisplayFilterCount} active` : ""}`}
+            aria-expanded={displayFilterMenuOpen}
+            title="Map display filters"
+            onClick={() => {
+              setDisplayFilterMenuOpen((open) => !open);
+              setBaseLayerMenuOpen(false);
+            }}
+          >
+            <SlidersHorizontal size={16} />
+          </button>
+          {displayFilterMenuOpen && (
+            <div
+              className="map-filter-menu"
+              role="menu"
+              aria-label="Map display filters"
+            >
+              <button
+                type="button"
+                role="menuitemcheckbox"
+                aria-checked={hideEmptyCells}
+                className={hideEmptyCells ? "active" : ""}
+                onClick={() => setHideEmptyCells(!hideEmptyCells)}
+              >
+                <EyeOff size={14} aria-hidden="true" />
+                <span>
+                  <strong>Hide empty cells</strong>
+                  <small>Zero and no-data values</small>
+                </span>
+                {hideEmptyCells && <Check size={14} aria-hidden="true" />}
+              </button>
+              <button
+                type="button"
+                role="menuitemcheckbox"
+                aria-checked={fieldClipActive}
+                className={fieldClipActive ? "active" : ""}
+                disabled={!fieldBoundary}
+                onClick={() => setClipToField(!clipToField)}
+              >
+                <Crop size={14} aria-hidden="true" />
+                <span>
+                  <strong>Cut to field</strong>
+                  <small>
+                    {fieldBoundary?.name ?? "No field boundary available"}
+                  </small>
+                </span>
+                {fieldClipActive && <Check size={14} aria-hidden="true" />}
+              </button>
+              <button
+                type="button"
+                role="menuitemcheckbox"
+                aria-checked={hideOutliers}
+                className={hideOutliers ? "active" : ""}
+                onClick={() => setHideOutliers(!hideOutliers)}
+              >
+                <TrendingDown size={14} aria-hidden="true" />
+                <span>
+                  <strong>Hide outliers</strong>
+                  <small title="Extreme values beyond 3× IQR, with a minimum 50% typical-value guard">
+                    {outlierCount
+                      ? `${outlierCount} extreme · conservative 3× IQR`
+                      : "None detected · conservative 3× IQR"}
+                  </small>
+                </span>
+                {hideOutliers && <Check size={14} aria-hidden="true" />}
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="basemap-control" ref={baseLayerControlRef}>
+          <button
+            type="button"
+            onClick={() => {
+              setBaseLayerMenuOpen((open) => !open);
+              setDisplayFilterMenuOpen(false);
+            }}
+            aria-label="Choose background map"
+            aria-expanded={baseLayerMenuOpen}
+            className={baseLayer !== "none" ? "active" : ""}
+            title="Background maps load tiles over the network"
+          >
+            <Layers size={16} />
+          </button>
+          {baseLayerMenuOpen && (
+            <div
+              className="basemap-menu"
+              role="menu"
+              aria-label="Background map"
+            >
+              {(
+                [
+                  ["none", "No background"],
+                  ["streets", "Streets"],
+                  ["satellite", "Satellite"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={baseLayer === id}
+                  className={baseLayer === id ? "active" : ""}
+                  key={id}
+                  onClick={() => {
+                    setBaseLayer(id);
+                    setBaseLayerMenuOpen(false);
+                  }}
+                >
+                  <span>{label}</span>
+                  {baseLayer === id && <b>ON</b>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => void exportMap()}
+          aria-label="Export map canvas"
+        >
+          <Download size={16} />
+        </button>
+      </div>
+
+      <div className="map-badge top-center">
+        <span className="pulse-dot" />
+        TYPE {grid.gridType} · {grid.decodedCellCount.toLocaleString()} CELLS ·{" "}
+        <span ref={renderModeLabelRef}>CANVAS</span>
+      </div>
+
+      {!spatiallyValid && (
+        <div className="map-spatial-error" role="status">
+          <AlertTriangle size={18} />
+          <div>
+            <strong>Grid coordinates are invalid</strong>
+            <span>The values remain available in the table and inspector.</span>
+          </div>
+        </div>
+      )}
+
+      {mapExportError && (
+        <div className="map-export-error" role="alert">
+          <AlertTriangle size={15} />
+          <span>{mapExportError}</span>
+          <button type="button" onClick={() => setMapExportError(undefined)}>
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      <section className="map-legend" aria-label="Active layer legend">
+        <div className="legend-kicker">
+          <span className="layer-swatch" />
+          PLANNED · ACTIVE
+        </div>
+        <h2>{channel.productName ?? "Product unresolved"}</h2>
+        <p>
+          DDI {channel.ddiDisplay} · {channel.ddiName}
+        </p>
+        <div className="legend-ramp" aria-hidden="true">
+          {classColors.map((color, index) => (
+            <span key={`${color}-${index}`} style={{ background: color }} />
+          ))}
+        </div>
+        <div className="legend-range">
+          <span>{min.toFixed(channel.presentation.decimals)}</span>
+          <strong>{channel.unit ?? "unit unknown"}</strong>
+          <span>{max.toFixed(channel.presentation.decimals)}</span>
+        </div>
+        <dl>
+          <div>
+            <dt>Scale</dt>
+            <dd>{scaleLabel}</dd>
+          </div>
+          {averageDose && (
+            <div>
+              <dt>Average dose</dt>
+              <dd>{averageDose}</dd>
+            </div>
+          )}
+          {totalDose && (
+            <div>
+              <dt>Total dose</dt>
+              <dd>{totalDose}</dd>
+            </div>
+          )}
+          <div>
+            <dt>Visible / filtered</dt>
+            <dd>
+              {visibleCellCount} / {filteredCellCount}
+            </dd>
+          </div>
+          <div>
+            <dt>Zero / no-data</dt>
+            <dd>
+              {zeroCount} / {noDataCount}
+            </dd>
+          </div>
+          <div>
+            <dt>Source</dt>
+            <dd>{grid.filename}</dd>
+          </div>
+        </dl>
+      </section>
+
+      {hoveredValue && hoverPosition && (
+        <div
+          className="map-tooltip"
+          style={{ left: hoverPosition.x, top: hoverPosition.y }}
+          role="tooltip"
+        >
+          <div className="tooltip-header">
+            <span>
+              R{hoveredRow + 1} · C{hoveredColumn + 1}
+            </span>
+            <strong>#{hoveredCellIndex}</strong>
+          </div>
+          <div className="tooltip-value">
+            {hoveredValue.formattedValue}
+            <small>{channel.unit}</small>
+          </div>
+          <dl>
+            <div>
+              <dt>Raw</dt>
+              <dd>{hoveredValue.rawValue}</dd>
+            </div>
+            <div>
+              <dt>Layout</dt>
+              <dd>
+                {grid.gridType === 2
+                  ? "Direct"
+                  : `Zone ${grid.treatmentZoneCodes[hoveredCellIndex ?? 0]}`}
+              </dd>
+            </div>
+            <div>
+              <dt>PDV</dt>
+              <dd>
+                {channel.pdvIndex + 1} / {grid.channels.length}
+              </dd>
+            </div>
+          </dl>
+          <span className="tooltip-hint">
+            Click to pin this cell and coordinate
+          </span>
+        </div>
+      )}
+
+      {pinnedCoordinate && pinnedScreenPosition && (
+        <button
+          type="button"
+          className="map-coordinate-pin"
+          style={{
+            left: pinnedScreenPosition.x,
+            top: pinnedScreenPosition.y,
+          }}
+          aria-label={`Remove pinned coordinate ${pinnedCoordinate}`}
+          title="Remove pinned coordinate"
+          onClick={() => {
+            pinnedLatLngRef.current = undefined;
+            setPinnedCoordinate(undefined);
+            setPinnedScreenPosition(undefined);
+          }}
+        >
+          <MapPin size={24} aria-hidden="true" />
+        </button>
+      )}
+
+      <div className={`map-coordinate ${pinnedCoordinate ? "pinned" : "live"}`}>
+        <LocateFixed size={13} />
+        <span>{pinnedCoordinate ?? liveCoordinate}</span>
+        {pinnedCoordinate ? (
+          <button
+            type="button"
+            onClick={() => {
+              void copyTextToClipboard(pinnedCoordinate).then((copied) => {
+                if (!copied) {
+                  setMapExportError(
+                    "The browser denied clipboard access. Select the coordinate text and copy it manually.",
+                  );
+                }
+              });
+            }}
+            title="Copy the coordinate pinned by the last map click"
+          >
+            COPY
+          </button>
+        ) : (
+          <small>CLICK MAP TO PIN</small>
+        )}
+      </div>
+      <div className="diagnostic-overlay">
+        <ScanLine size={13} />
+        <span>Binary layout</span>
+        <strong>{grid.bytesPerCell} B/cell</strong>
+        {cellAreaSquareMeters !== undefined && cellDimensionsMeters && (
+          <>
+            <span aria-hidden="true">·</span>
+            <strong>
+              {grid.cellSizeUnit === "degrees" ? "≈" : ""}
+              {formatCellLength(cellDimensionsMeters.northSouth)} ×{" "}
+              {formatCellLength(cellDimensionsMeters.eastWest)} m ·{" "}
+              {formatCellArea(cellAreaSquareMeters)} m²/cell
+            </strong>
+          </>
+        )}
+      </div>
+    </main>
+  );
+}

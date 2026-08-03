@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="OENG precision field mark">
+  <defs>
+    <linearGradient id="frame" x1="8" y1="5" x2="57" y2="61" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#193328"/>
+      <stop offset="1" stop-color="#091611"/>
+    </linearGradient>
+    <clipPath id="field">
+      <path d="M12 16.5 52 12v36L12 52.5z"/>
+    </clipPath>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="12" fill="url(#frame)" stroke="#86A94B" stroke-width="2"/>
+  <g clip-path="url(#field)">
+    <path d="M12 12h11v44H12z" fill="#2D5940"/>
+    <path d="M23 12h10v44H23z" fill="#3F7143"/>
+    <path d="M33 12h10v44H33z" fill="#668D45"/>
+    <path d="M43 12h10v44H43z" fill="#8AA447"/>
+    <path d="M12 28.5 52 24M12 41 52 36.5" stroke="#D8ECA0" stroke-opacity=".2" stroke-width="1.25"/>
+  </g>
+  <path d="M14.5 48c7-4.5 8-11.5 12.5-17.5C32 23.8 39 19 49.5 15" fill="none" stroke="#E5F2B2" stroke-width="3.5" stroke-linecap="round"/>
+  <circle cx="14.5" cy="48" r="3.25" fill="#E5F2B2"/>
+  <circle cx="49.5" cy="15" r="3.25" fill="#E5F2B2"/>
+  <circle cx="30" cy="27.5" r="7" fill="#102219" stroke="#E5F2B2" stroke-width="3"/>
+  <circle cx="30" cy="27.5" r="2" fill="#86A94B"/>
+</svg>
