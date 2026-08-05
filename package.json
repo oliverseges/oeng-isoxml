@@ -28,6 +28,7 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "format": "prettier --write .",
     "fixtures:generate": "node scripts/generate-fixtures.mjs",
+    "fixtures:performance": "node scripts/generate-performance-fixtures.mjs",
     "icons:generate": "node scripts/generate-favicon.mjs",
     "ddi:sync": "node scripts/sync-isobus-ddi.mjs"
   },

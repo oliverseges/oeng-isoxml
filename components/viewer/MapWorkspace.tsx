@@ -45,6 +45,7 @@ import type {
   SpatialBoundary,
 } from "@/lib/isoxml/types";
 import { useViewerStore } from "./store";
+import { buildMapGridRaster, type MapGridRaster } from "./map-rendering";
 import {
   BASEMAP_ZOOM_OPTIONS,
   MAP_MAX_ZOOM,
@@ -362,6 +363,13 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
   const tileLayerRef = useRef<TileLayer | undefined>(undefined);
   const leafletRef = useRef<typeof import("leaflet") | undefined>(undefined);
   const drawRef = useRef<() => void>(() => {});
+  const gridRasterCanvasRef = useRef<
+    | {
+        source: MapGridRaster;
+        canvas: HTMLCanvasElement;
+      }
+    | undefined
+  >(undefined);
   const hiddenCellMaskRef = useRef<Uint8Array>(new Uint8Array());
   const fieldClipRef = useRef<{
     enabled: boolean;
@@ -534,6 +542,25 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
     () => colorsForClasses(valueClassification.classCount),
     [valueClassification.classCount],
   );
+  const gridRaster = useMemo(
+    () =>
+      buildMapGridRaster(
+        grid,
+        hiddenCellMask,
+        noDataCells,
+        numericValueByCell,
+        valueClassification,
+        classColors,
+      ),
+    [
+      classColors,
+      grid,
+      hiddenCellMask,
+      noDataCells,
+      numericValueByCell,
+      valueClassification,
+    ],
+  );
   const scaleLabel = scaleDescription(valueClassification);
   const min = valueClassification.min;
   const max = valueClassification.max;
@@ -597,78 +624,116 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
         traceBoundaryPath(context, map, fieldBoundary);
         context.clip();
       }
-      const mapBounds = map.getBounds();
-      const visibleRange = gridCellRangeForBounds(grid, {
-        north: mapBounds.getNorth(),
-        south: mapBounds.getSouth(),
-        east: mapBounds.getEast(),
-        west: mapBounds.getWest(),
-      });
-      const visibleRows = visibleRange
-        ? visibleRange.lastRow - visibleRange.firstRow + 1
-        : 0;
-      const visibleColumns = visibleRange
-        ? visibleRange.lastColumn - visibleRange.firstColumn + 1
-        : 0;
-      const renderStride = Math.max(
-        1,
-        Math.ceil(
-          Math.sqrt((visibleRows * visibleColumns) / MAX_PAINTED_CELL_BLOCKS),
-        ),
-      );
-      if (renderModeLabelRef.current) {
-        renderModeLabelRef.current.textContent =
-          renderStride > 1
-            ? `SAMPLED ${renderStride}×${renderStride}`
-            : "CANVAS";
-      }
-      for (
-        let row = visibleRange?.firstRow ?? 0;
-        row <= (visibleRange?.lastRow ?? -1);
-        row += renderStride
-      ) {
+      const gridBounds = geographicGridBounds(grid);
+      if (gridRaster && gridBounds) {
+        let cachedRaster = gridRasterCanvasRef.current;
+        if (!cachedRaster || cachedRaster.source !== gridRaster) {
+          const rasterCanvas = document.createElement("canvas");
+          rasterCanvas.width = gridRaster.width;
+          rasterCanvas.height = gridRaster.height;
+          const rasterContext = rasterCanvas.getContext("2d");
+          if (rasterContext) {
+            const imageData = rasterContext.createImageData(
+              gridRaster.width,
+              gridRaster.height,
+            );
+            imageData.data.set(gridRaster.pixels);
+            rasterContext.putImageData(imageData, 0, 0);
+          }
+          cachedRaster = { source: gridRaster, canvas: rasterCanvas };
+          gridRasterCanvasRef.current = cachedRaster;
+        }
+        const [[south, west], [north, east]] = gridBounds;
+        const topLeft = map.latLngToContainerPoint([north, west]);
+        const bottomRight = map.latLngToContainerPoint([south, east]);
+        context.imageSmoothingEnabled = false;
+        context.globalAlpha = 1;
+        context.drawImage(
+          cachedRaster.canvas,
+          topLeft.x,
+          topLeft.y,
+          bottomRight.x - topLeft.x,
+          bottomRight.y - topLeft.y,
+        );
+        if (renderModeLabelRef.current) {
+          renderModeLabelRef.current.textContent = "RASTER";
+        }
+      } else {
+        const mapBounds = map.getBounds();
+        const visibleRange = gridCellRangeForBounds(grid, {
+          north: mapBounds.getNorth(),
+          south: mapBounds.getSouth(),
+          east: mapBounds.getEast(),
+          west: mapBounds.getWest(),
+        });
+        const visibleRows = visibleRange
+          ? visibleRange.lastRow - visibleRange.firstRow + 1
+          : 0;
+        const visibleColumns = visibleRange
+          ? visibleRange.lastColumn - visibleRange.firstColumn + 1
+          : 0;
+        const renderStride = Math.max(
+          1,
+          Math.ceil(
+            Math.sqrt((visibleRows * visibleColumns) / MAX_PAINTED_CELL_BLOCKS),
+          ),
+        );
+        if (renderModeLabelRef.current) {
+          renderModeLabelRef.current.textContent =
+            renderStride > 1
+              ? `SAMPLED ${renderStride}×${renderStride}`
+              : "CANVAS";
+        }
         for (
-          let column = visibleRange?.firstColumn ?? 0;
-          column <= (visibleRange?.lastColumn ?? -1);
-          column += renderStride
+          let row = visibleRange?.firstRow ?? 0;
+          row <= (visibleRange?.lastRow ?? -1);
+          row += renderStride
         ) {
-          const sampleRow = Math.min(
-            row + Math.floor(renderStride / 2),
-            visibleRange?.lastRow ?? row,
-          );
-          const sampleColumn = Math.min(
-            column + Math.floor(renderStride / 2),
-            visibleRange?.lastColumn ?? column,
-          );
-          const index = sampleRow * grid.columns + sampleColumn;
-          if (index >= grid.decodedCellCount || hiddenCellMask[index]) continue;
-          const firstBounds = geographicCellBounds(grid, row, column);
-          const lastBounds = geographicCellBounds(
-            grid,
-            Math.min(row + renderStride - 1, grid.rows - 1),
-            Math.min(column + renderStride - 1, grid.columns - 1),
-          );
-          if (!firstBounds || !lastBounds) continue;
-          const north = Math.max(firstBounds.north, lastBounds.north);
-          const south = Math.min(firstBounds.south, lastBounds.south);
-          const west = Math.min(firstBounds.west, lastBounds.west);
-          const east = Math.max(firstBounds.east, lastBounds.east);
-          const topLeft = map.latLngToContainerPoint([north, west]);
-          const bottomRight = map.latLngToContainerPoint([south, east]);
-          const width = bottomRight.x - topLeft.x;
-          const height = bottomRight.y - topLeft.y;
-          context.fillStyle = noDataCells[index]
-            ? "#3c4541"
-            : colorFor(
-                numericValueByCell[index],
-                valueClassification,
-                classColors,
-              );
-          context.globalAlpha = 0.88;
-          context.fillRect(topLeft.x, topLeft.y, width + 0.35, height + 0.35);
-          context.strokeStyle = "rgba(8, 18, 16, 0.34)";
-          context.lineWidth = 0.7;
-          context.strokeRect(topLeft.x, topLeft.y, width, height);
+          for (
+            let column = visibleRange?.firstColumn ?? 0;
+            column <= (visibleRange?.lastColumn ?? -1);
+            column += renderStride
+          ) {
+            const sampleRow = Math.min(
+              row + Math.floor(renderStride / 2),
+              visibleRange?.lastRow ?? row,
+            );
+            const sampleColumn = Math.min(
+              column + Math.floor(renderStride / 2),
+              visibleRange?.lastColumn ?? column,
+            );
+            const index = sampleRow * grid.columns + sampleColumn;
+            if (index >= grid.decodedCellCount || hiddenCellMask[index]) {
+              continue;
+            }
+            const firstBounds = geographicCellBounds(grid, row, column);
+            const lastBounds = geographicCellBounds(
+              grid,
+              Math.min(row + renderStride - 1, grid.rows - 1),
+              Math.min(column + renderStride - 1, grid.columns - 1),
+            );
+            if (!firstBounds || !lastBounds) continue;
+            const north = Math.max(firstBounds.north, lastBounds.north);
+            const south = Math.min(firstBounds.south, lastBounds.south);
+            const west = Math.min(firstBounds.west, lastBounds.west);
+            const east = Math.max(firstBounds.east, lastBounds.east);
+            const topLeft = map.latLngToContainerPoint([north, west]);
+            const bottomRight = map.latLngToContainerPoint([south, east]);
+            const width = bottomRight.x - topLeft.x;
+            const height = bottomRight.y - topLeft.y;
+            context.fillStyle = noDataCells[index]
+              ? "#3c4541"
+              : colorFor(
+                  numericValueByCell[index],
+                  valueClassification,
+                  classColors,
+                );
+            context.globalAlpha = 0.88;
+            context.fillRect(topLeft.x, topLeft.y, width + 0.35, height + 0.35);
+            context.strokeStyle = "rgba(8, 18, 16, 0.34)";
+            context.lineWidth = 0.7;
+            context.strokeRect(topLeft.x, topLeft.y, width, height);
+          }
         }
       }
       if (
@@ -731,6 +796,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
       fieldBoundary,
       fieldClipActive,
       grid,
+      gridRaster,
       hiddenCellMask,
       classColors,
       noDataCells,
@@ -746,10 +812,16 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
     if (!map || !canvas) return;
     const size = map.getSize();
     const ratio = window.devicePixelRatio || 1;
-    canvas.width = size.x * ratio;
-    canvas.height = size.y * ratio;
-    canvas.style.width = `${size.x}px`;
-    canvas.style.height = `${size.y}px`;
+    const backingWidth = Math.max(1, Math.round(size.x * ratio));
+    const backingHeight = Math.max(1, Math.round(size.y * ratio));
+    if (canvas.width !== backingWidth) canvas.width = backingWidth;
+    if (canvas.height !== backingHeight) canvas.height = backingHeight;
+    if (canvas.style.width !== `${size.x}px`) {
+      canvas.style.width = `${size.x}px`;
+    }
+    if (canvas.style.height !== `${size.y}px`) {
+      canvas.style.height = `${size.y}px`;
+    }
     const context = canvas.getContext("2d");
     if (!context) return;
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
@@ -777,6 +849,8 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
   useEffect(() => {
     if (!containerRef.current) return;
     let disposed = false;
+    let redrawFrame: number | undefined;
+    let hoverFrame: number | undefined;
     void import("leaflet").then((leaflet) => {
       if (disposed || !containerRef.current) return;
       leafletRef.current = leaflet;
@@ -845,33 +919,43 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
       canvasRef.current = canvas;
 
       const redraw = () => {
-        drawRef.current();
-        const pinnedLatLng = pinnedLatLngRef.current;
-        if (!pinnedLatLng) return;
-        const point = map.latLngToContainerPoint([
-          pinnedLatLng.latitude,
-          pinnedLatLng.longitude,
-        ]);
-        setPinnedScreenPosition((current) =>
-          current && current.x === point.x && current.y === point.y
-            ? current
-            : { x: point.x, y: point.y },
-        );
+        if (redrawFrame !== undefined) return;
+        redrawFrame = requestAnimationFrame(() => {
+          redrawFrame = undefined;
+          drawRef.current();
+          const pinnedLatLng = pinnedLatLngRef.current;
+          if (!pinnedLatLng) return;
+          const point = map.latLngToContainerPoint([
+            pinnedLatLng.latitude,
+            pinnedLatLng.longitude,
+          ]);
+          setPinnedScreenPosition((current) =>
+            current && current.x === point.x && current.y === point.y
+              ? current
+              : { x: point.x, y: point.y },
+          );
+        });
       };
-      map.on("move zoom resize", redraw);
-      map.on("mousemove", (event) => {
+      let pendingHover:
+        | { latitude: number; longitude: number; x: number; y: number }
+        | undefined;
+      const updateHover = () => {
+        hoverFrame = undefined;
+        const hover = pendingHover;
+        if (!hover) return;
+        pendingHover = undefined;
         const activeEventGrid = gridRef.current;
         const candidateIndex = gridCellIndexAt(
           activeEventGrid,
-          event.latlng.lat,
-          event.latlng.lng,
+          hover.latitude,
+          hover.longitude,
         );
         const hiddenCells = hiddenCellMaskRef.current;
         const { enabled, boundary } = fieldClipRef.current;
         const insideField =
           !enabled ||
           !boundary ||
-          pointIsInsideBoundary(event.latlng.lat, event.latlng.lng, boundary);
+          pointIsInsideBoundary(hover.latitude, hover.longitude, boundary);
         const index =
           candidateIndex !== undefined &&
           !hiddenCells[candidateIndex] &&
@@ -880,21 +964,34 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
             : undefined;
         setHoveredCell(index);
         setLiveCoordinate(
-          `${event.latlng.lat.toFixed(6)}, ${event.latlng.lng.toFixed(6)}`,
+          `${hover.latitude.toFixed(6)}, ${hover.longitude.toFixed(6)}`,
         );
         setHoverPosition(
           index === undefined
             ? undefined
-            : {
-                x: event.containerPoint.x + 14,
-                y: event.containerPoint.y + 14,
-              },
+            : { x: hover.x + 14, y: hover.y + 14 },
         );
-      });
-      map.on("mouseout", () => {
+      };
+      const clearHover = () => {
+        pendingHover = undefined;
+        if (hoverFrame !== undefined) cancelAnimationFrame(hoverFrame);
+        hoverFrame = undefined;
         setHoveredCell(undefined);
         setHoverPosition(undefined);
+      };
+      map.on("move zoom resize", redraw);
+      map.on("mousemove", (event) => {
+        pendingHover = {
+          latitude: event.latlng.lat,
+          longitude: event.latlng.lng,
+          x: event.containerPoint.x,
+          y: event.containerPoint.y,
+        };
+        if (hoverFrame === undefined) {
+          hoverFrame = requestAnimationFrame(updateHover);
+        }
       });
+      map.on("mouseout movestart zoomstart", clearHover);
       map.on("click", (event) => {
         pinnedLatLngRef.current = {
           latitude: event.latlng.lat,
@@ -926,11 +1023,13 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
             : undefined;
         if (index !== undefined) setSelectedCell(index);
       });
-      requestAnimationFrame(redraw);
+      redraw();
     });
 
     return () => {
       disposed = true;
+      if (redrawFrame !== undefined) cancelAnimationFrame(redrawFrame);
+      if (hoverFrame !== undefined) cancelAnimationFrame(hoverFrame);
       mapReadyRef.current = false;
       tileLayerRef.current?.remove();
       tileLayerRef.current = undefined;

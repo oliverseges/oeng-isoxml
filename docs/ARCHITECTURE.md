@@ -33,6 +33,7 @@ Heavy byte arrays live in a repository, not the reactive UI store. Zustand only 
 | `lib/isoxml/pipeline.ts`                | Staged validation, domain summaries and manifest construction   |
 | `lib/isoxml/spatial.ts`                 | Bounds, coordinates, hit testing and viewport cell ranges       |
 | `components/viewer/MapWorkspace.tsx`    | Leaflet lifecycle, canvas overlay, filters and map-image export |
+| `components/viewer/map-rendering.ts`    | Grid rasterization and allocation-free point projection         |
 | `lib/isoxml/export.ts`                  | CSV and GeoJSON serialization helpers                           |
 | `lib/isoxml/package-transform.ts`       | Guarded cleanup/remap and compatible task-merge ZIP variants    |
 | `components/viewer/*`                   | Workspace, virtualized tree/table, inspector, dialogs and state |
@@ -50,7 +51,7 @@ worker: grid decode + scored time-log adapter selection
         ↓
 dataset repository
         ↓
-lightweight UI state → Leaflet canvas + inspector/table
+lightweight UI state → cached raster/batched Leaflet canvas + inspector/table
 ```
 
 `ArrayBuffer` inputs and decoded typed arrays are transferred rather than cloned. Imports use a fresh worker that is terminated after success or failure. A manual time-log adapter change uses a separate short-lived worker and retains the original source unchanged. User-triggered cancellation is not implemented. Imported strings are rendered as text only. External entities, DTDs, archive traversal and oversized retained data are rejected.

@@ -37,6 +37,7 @@ import {
   nearestMapPointIndex,
   type MapPointHitBuckets,
 } from "./map-hit-testing";
+import { webMercatorWorldPixel } from "./map-rendering";
 
 const colorStops = [
   "#176b48",
@@ -184,6 +185,22 @@ export function TimeLogMapWorkspace({
     }
     return indexes;
   }, [excludedMask, numericValues]);
+  const pointWorldPixels = useMemo(() => {
+    const x = new Float64Array(numericValues.length);
+    const y = new Float64Array(numericValues.length);
+    x.fill(Number.NaN);
+    y.fill(Number.NaN);
+    for (let index = 0; index < numericValues.length; index += 1) {
+      if (!Number.isFinite(numericValues[index])) continue;
+      const point = webMercatorWorldPixel(
+        timeLog.latitudes[index],
+        timeLog.longitudes[index],
+      );
+      x[index] = point.x;
+      y[index] = point.y;
+    }
+    return { x, y };
+  }, [numericValues, timeLog.latitudes, timeLog.longitudes]);
 
   const fitTimeLog = useCallback(() => {
     const map = mapRef.current;
@@ -205,10 +222,16 @@ export function TimeLogMapWorkspace({
     if (!map || !canvas) return;
     const size = map.getSize();
     const ratio = window.devicePixelRatio || 1;
-    canvas.width = size.x * ratio;
-    canvas.height = size.y * ratio;
-    canvas.style.width = `${size.x}px`;
-    canvas.style.height = `${size.y}px`;
+    const backingWidth = Math.max(1, Math.round(size.x * ratio));
+    const backingHeight = Math.max(1, Math.round(size.y * ratio));
+    if (canvas.width !== backingWidth) canvas.width = backingWidth;
+    if (canvas.height !== backingHeight) canvas.height = backingHeight;
+    if (canvas.style.width !== `${size.x}px`) {
+      canvas.style.width = `${size.x}px`;
+    }
+    if (canvas.style.height !== `${size.y}px`) {
+      canvas.style.height = `${size.y}px`;
+    }
     const context = canvas.getContext("2d");
     if (!context) return;
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
@@ -228,36 +251,64 @@ export function TimeLogMapWorkspace({
 
     const radius = Math.max(3, Math.min(6, map.getZoom() - 12));
     const hitBuckets: MapPointHitBuckets = new Map();
-    pointRecordIndexes.forEach((recordIndex) => {
-      const point = map.latLngToContainerPoint([
-        timeLog.latitudes[recordIndex],
-        timeLog.longitudes[recordIndex],
-      ]);
-      if (
-        point.x >= -10 &&
-        point.y >= -10 &&
-        point.x <= size.x + 10 &&
-        point.y <= size.y + 10
-      ) {
-        addMapPointHitTarget(hitBuckets, {
-          recordIndex,
-          x: point.x,
-          y: point.y,
-        });
+    const zoomScale = 2 ** map.getZoom();
+    const worldOrigin = map.latLngToContainerPoint([0, 0]);
+    const offsetX = worldOrigin.x - 128 * zoomScale;
+    const offsetY = worldOrigin.y - 128 * zoomScale;
+    const densityBucketSize =
+      pointRecordIndexes.length > 10_000
+        ? Math.max(4, Math.ceil(radius * 1.75))
+        : 1;
+    const densityColumns = Math.max(
+      1,
+      Math.ceil((size.x + 20) / densityBucketSize),
+    );
+    const densityRows = Math.max(
+      1,
+      Math.ceil((size.y + 20) / densityBucketSize),
+    );
+    const occupiedDensityBuckets = new Uint8Array(densityColumns * densityRows);
+    const paths = Array.from(
+      { length: Math.max(1, classColors.length) },
+      () => new Path2D(),
+    );
+    let renderedPointCount = 0;
+    for (const recordIndex of pointRecordIndexes) {
+      const x = pointWorldPixels.x[recordIndex] * zoomScale + offsetX;
+      const y = pointWorldPixels.y[recordIndex] * zoomScale + offsetY;
+      if (x < -10 || y < -10 || x > size.x + 10 || y > size.y + 10) {
+        continue;
       }
+      const densityColumn = Math.max(
+        0,
+        Math.min(densityColumns - 1, Math.floor((x + 10) / densityBucketSize)),
+      );
+      const densityRow = Math.max(
+        0,
+        Math.min(densityRows - 1, Math.floor((y + 10) / densityBucketSize)),
+      );
+      const densityIndex = densityRow * densityColumns + densityColumn;
+      if (occupiedDensityBuckets[densityIndex]) continue;
+      occupiedDensityBuckets[densityIndex] = 1;
+      renderedPointCount += 1;
+      addMapPointHitTarget(hitBuckets, { recordIndex, x, y });
       const classIndex = classIndexForValue(
         numericValues[recordIndex],
         classification,
       );
-      context.beginPath();
-      context.arc(point.x, point.y, radius, 0, Math.PI * 2);
-      context.fillStyle =
-        classIndex === undefined ? "#526059" : classColors[classIndex];
-      context.globalAlpha = 0.9;
-      context.fill();
-      context.strokeStyle = "rgba(8, 18, 16, 0.55)";
-      context.lineWidth = 0.7;
-      context.stroke();
+      const path = paths[classIndex ?? 0];
+      path.moveTo(x + radius, y);
+      path.arc(x, y, radius, 0, Math.PI * 2);
+    }
+    context.globalAlpha = 0.9;
+    paths.forEach((path, index) => {
+      context.fillStyle = classColors[index] ?? "#526059";
+      context.fill(path);
+      if (renderedPointCount <= 12_000) {
+        context.strokeStyle = "rgba(8, 18, 16, 0.55)";
+        context.lineWidth = 0.7;
+        context.stroke(path);
+      }
     });
     pointHitBucketsRef.current = hitBuckets;
 
@@ -265,10 +316,10 @@ export function TimeLogMapWorkspace({
       selectedRecordIndex !== undefined &&
       Number.isFinite(numericValues[selectedRecordIndex])
     ) {
-      const point = map.latLngToContainerPoint([
-        timeLog.latitudes[selectedRecordIndex],
-        timeLog.longitudes[selectedRecordIndex],
-      ]);
+      const point = {
+        x: pointWorldPixels.x[selectedRecordIndex] * zoomScale + offsetX,
+        y: pointWorldPixels.y[selectedRecordIndex] * zoomScale + offsetY,
+      };
       context.globalAlpha = 1;
       context.beginPath();
       context.arc(point.x, point.y, radius + 3, 0, Math.PI * 2);
@@ -289,9 +340,8 @@ export function TimeLogMapWorkspace({
     dataset.boundaries,
     numericValues,
     pointRecordIndexes,
+    pointWorldPixels,
     selectedRecordIndex,
-    timeLog.latitudes,
-    timeLog.longitudes,
   ]);
 
   useEffect(() => {
@@ -302,6 +352,8 @@ export function TimeLogMapWorkspace({
   useEffect(() => {
     if (!containerRef.current) return;
     let disposed = false;
+    let redrawFrame: number | undefined;
+    let hoverFrame: number | undefined;
     void import("leaflet").then((leaflet) => {
       if (disposed || !containerRef.current) return;
       leafletRef.current = leaflet;
@@ -359,29 +411,60 @@ export function TimeLogMapWorkspace({
       canvas.setAttribute("aria-hidden", "true");
       containerRef.current.appendChild(canvas);
       canvasRef.current = canvas;
-      map.on("move zoom resize", () => drawRef.current());
-      map.on("mousemove", (event) => {
+      const redraw = () => {
+        if (redrawFrame !== undefined) return;
+        redrawFrame = requestAnimationFrame(() => {
+          redrawFrame = undefined;
+          drawRef.current();
+        });
+      };
+      let pendingHover:
+        | {
+            latitude: number;
+            longitude: number;
+            x: number;
+            y: number;
+          }
+        | undefined;
+      const updateHover = () => {
+        hoverFrame = undefined;
+        const hover = pendingHover;
+        if (!hover) return;
+        pendingHover = undefined;
         setLiveCoordinate(
-          `${event.latlng.lat.toFixed(6)}, ${event.latlng.lng.toFixed(6)}`,
+          `${hover.latitude.toFixed(6)}, ${hover.longitude.toFixed(6)}`,
         );
-        const recordIndex = nearestMapPointIndex(
-          pointHitBucketsRef.current,
-          event.containerPoint,
-        );
+        const recordIndex = nearestMapPointIndex(pointHitBucketsRef.current, {
+          x: hover.x,
+          y: hover.y,
+        });
         setHoveredRecordIndex(recordIndex);
         setHoverScreenPosition(
           recordIndex === undefined
             ? undefined
-            : {
-                x: event.containerPoint.x + 14,
-                y: event.containerPoint.y + 14,
-              },
+            : { x: hover.x + 14, y: hover.y + 14 },
         );
-      });
-      map.on("mouseout movestart zoomstart", () => {
+      };
+      const clearHover = () => {
+        pendingHover = undefined;
+        if (hoverFrame !== undefined) cancelAnimationFrame(hoverFrame);
+        hoverFrame = undefined;
         setHoveredRecordIndex(undefined);
         setHoverScreenPosition(undefined);
+      };
+      map.on("move zoom resize", redraw);
+      map.on("mousemove", (event) => {
+        pendingHover = {
+          latitude: event.latlng.lat,
+          longitude: event.latlng.lng,
+          x: event.containerPoint.x,
+          y: event.containerPoint.y,
+        };
+        if (hoverFrame === undefined) {
+          hoverFrame = requestAnimationFrame(updateHover);
+        }
       });
+      map.on("mouseout movestart zoomstart", clearHover);
       map.on("click", (event) => {
         setSelectedRecord(
           nearestMapPointIndex(
@@ -390,10 +473,12 @@ export function TimeLogMapWorkspace({
           ),
         );
       });
-      requestAnimationFrame(() => drawRef.current());
+      redraw();
     });
     return () => {
       disposed = true;
+      if (redrawFrame !== undefined) cancelAnimationFrame(redrawFrame);
+      if (hoverFrame !== undefined) cancelAnimationFrame(hoverFrame);
       setSelectedScreenPosition(undefined);
       setHoveredRecordIndex(undefined);
       setHoverScreenPosition(undefined);

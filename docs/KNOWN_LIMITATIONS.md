@@ -15,7 +15,7 @@ The shipped version is a production-quality vertical slice, not a complete ISOXM
 - Imports run in a dedicated worker, but there is no user-facing cancel action after a read has started.
 - Exact raw XML and bytes are retained. The parsed object index does not model comments, processing instructions or exact mixed-text placement.
 - XML line/column offsets are not yet emitted by `fast-xml-parser`; object paths are available.
-- Grid georeferencing is axis-aligned in the first renderer. Display clipping to a field boundary is available; rotated grids are not implemented.
+- Grid georeferencing and cached raster rendering are axis-aligned. Display clipping to a field boundary is available; rotated grids are not implemented. Grids wider or taller than 8,192 cells use the bounded viewport-sampling fallback instead of a cached raster.
 - Planned-versus-executed analysis and time animation remain future work. Active planned layers show a finite-value average and an area-weighted total only for recognized per-hectare or per-square-metre units, using the declared constant cell area and current display filters.
 - Map PNG composition includes the current viewport, active cells, selected background, boundary and legend while omitting controls and the selected-cell outline. Remote tile pixels depend on provider CORS behavior; the UI suggests exporting without a background when the browser blocks them.
 - Active planned/executed-channel CSV and planned-map PNG are the current user-facing data exports. Executed-map image export is not implemented. GeoJSON serialization exists as a library helper but is not yet wired to a control; validation and object-registry JSON exports are not implemented.
