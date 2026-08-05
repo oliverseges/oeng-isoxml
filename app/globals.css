@@ -2519,18 +2519,22 @@ a:focus-visible {
 
 .cell-table {
   height: 100%;
-  display: grid;
-  grid-template-rows: 27px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
 }
 
 .cell-table-head,
 .cell-table-row {
   display: grid;
-  grid-template-columns: 60px 50px 60px 55px 100px 120px 74px minmax(130px, 1fr);
-  min-width: 720px;
+  width: 100%;
+  min-width: 0;
 }
 
 .cell-table-head {
+  position: sticky;
+  z-index: 3;
+  top: 0;
+  height: 27px;
   color: var(--faint);
   border-bottom: 1px solid var(--line);
   background: var(--panel-raised);
@@ -2540,6 +2544,7 @@ a:focus-visible {
 
 .cell-table-head span,
 .cell-table-row span {
+  position: relative;
   display: flex;
   align-items: center;
   min-width: 0;
@@ -2548,6 +2553,44 @@ a:focus-visible {
   border-right: 1px solid var(--line-soft);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.cell-column-resizer {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: -4px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.cell-column-resizer::after {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 3px;
+  width: 1px;
+  background: transparent;
+  content: "";
+}
+
+.cell-column-resizer:hover::after,
+.cell-column-resizer:focus-visible::after,
+.resizing-table-column .cell-column-resizer::after {
+  background: var(--accent);
+}
+
+.cell-column-resizer:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+body.resizing-table-column,
+body.resizing-table-column * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 .cell-table-row {
@@ -2578,7 +2621,17 @@ a:focus-visible {
 }
 
 .cell-table-scroll {
+  height: 100%;
   min-height: 0;
+}
+
+.cell-table-width {
+  width: 100%;
+  min-height: 100%;
+}
+
+.cell-table-virtual-body {
+  position: relative;
 }
 
 .file-table,

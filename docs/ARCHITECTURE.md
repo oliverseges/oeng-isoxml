@@ -35,6 +35,7 @@ Heavy byte arrays live in a repository, not the reactive UI store. Zustand only 
 | `components/viewer/MapWorkspace.tsx`        | Planned Leaflet/canvas lifecycle, filters and map-image export  |
 | `components/viewer/TimeLogMapWorkspace.tsx` | Executed Leaflet/canvas lifecycle, points and map-image export  |
 | `components/viewer/ViewerApp.tsx`           | Stable panel-grid placement and persisted workspace layout      |
+| `components/viewer/BottomPanel.tsx`         | Virtualized data tables and resizable column presentation       |
 | `components/viewer/map-rendering.ts`        | Grid rasterization and allocation-free point projection         |
 | `lib/isoxml/export.ts`                      | CSV and GeoJSON serialization helpers                           |
 | `lib/isoxml/package-transform.ts`           | Guarded cleanup/remap and compatible task-merge ZIP variants    |
@@ -80,6 +81,8 @@ does not synthesize a new DVC/DOR/DPD/DPT graph or rewrite executed data.
 The runnable slice covers local files and ZIPs, exact raw XML plus an ordered object index, task/product/treatment-zone/device/value-presentation relationships, Type 2 grids with independently selectable PDVs, Type 1 time logs with sparse DLV channels, decimal-safe scaling, Leaflet canvas rendering, selection inspection, file manifest, issue list and planned/executed CSV and map-image export. A GeoJSON serializer exists as a library adapter but is not exposed in the current UI.
 
 Planned and executed map containers are observed directly for size changes. Panel collapse, panel expansion, pointer resizing and responsive layout changes invalidate the Leaflet viewport and repaint the canvas without changing the active layer. Explicit CSS grid columns keep the map in the centre track even when either side panel is unmounted.
+
+Planned-cell and executed-record tables use compact bounded column defaults followed by a non-data spacer that absorbs unused panel width. This keeps rows full-width without stretching Unit or Product cells. Header separators resize columns by pointer or keyboard; double-click restores the default width, while row virtualization continues to decode only visible values.
 
 Type 1 grid decoding, non-Type-1 time-log layouts, schema validation and full interactive device graphs remain expansion points. The UI labels these as partial or unavailable instead of inferring data.
 

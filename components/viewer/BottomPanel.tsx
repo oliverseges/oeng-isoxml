@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   AlertCircle,
@@ -43,6 +43,168 @@ const severityIcon = {
   warning: TriangleAlert,
   info: Info,
 } as const;
+
+interface MatrixColumnDefinition {
+  label: string;
+  defaultWidth: number;
+  minWidth: number;
+  maxWidth: number;
+}
+
+const timeLogMatrixColumns: MatrixColumnDefinition[] = [
+  { label: "Record", defaultWidth: 62, minWidth: 52, maxWidth: 110 },
+  { label: "Time", defaultWidth: 82, minWidth: 68, maxWidth: 130 },
+  { label: "Latitude", defaultWidth: 96, minWidth: 76, maxWidth: 140 },
+  { label: "Longitude", defaultWidth: 96, minWidth: 78, maxWidth: 140 },
+  { label: "Position", defaultWidth: 92, minWidth: 72, maxWidth: 140 },
+  { label: "Raw int32", defaultWidth: 100, minWidth: 82, maxWidth: 150 },
+  { label: "Display value", defaultWidth: 112, minWidth: 92, maxWidth: 170 },
+  { label: "Unit", defaultWidth: 78, minWidth: 58, maxWidth: 120 },
+];
+
+const gridMatrixColumns: MatrixColumnDefinition[] = [
+  { label: "Cell", defaultWidth: 60, minWidth: 50, maxWidth: 100 },
+  { label: "Row", defaultWidth: 52, minWidth: 44, maxWidth: 90 },
+  { label: "Column", defaultWidth: 66, minWidth: 56, maxWidth: 110 },
+  { label: "Layout", defaultWidth: 70, minWidth: 58, maxWidth: 120 },
+  { label: "Raw int32", defaultWidth: 100, minWidth: 82, maxWidth: 150 },
+  { label: "Display value", defaultWidth: 112, minWidth: 92, maxWidth: 170 },
+  { label: "Unit", defaultWidth: 78, minWidth: 58, maxWidth: 120 },
+  { label: "Product", defaultWidth: 190, minWidth: 110, maxWidth: 360 },
+];
+
+function clampedColumnWidth(
+  column: MatrixColumnDefinition,
+  width: number,
+): number {
+  return Math.min(column.maxWidth, Math.max(column.minWidth, width));
+}
+
+function useResizableMatrixColumns(columns: MatrixColumnDefinition[]) {
+  const [widths, setWidths] = useState(() =>
+    columns.map((column) => column.defaultWidth),
+  );
+  const dragCleanupRef = useRef<() => void>(() => {});
+
+  useEffect(
+    () => () => {
+      dragCleanupRef.current();
+    },
+    [],
+  );
+
+  const setColumnWidth = useCallback(
+    (index: number, width: number) => {
+      setWidths((current) => {
+        const nextWidth = clampedColumnWidth(columns[index], width);
+        if (current[index] === nextWidth) return current;
+        const next = [...current];
+        next[index] = nextWidth;
+        return next;
+      });
+    },
+    [columns],
+  );
+
+  const beginColumnResize = useCallback(
+    (index: number, clientX: number) => {
+      dragCleanupRef.current();
+      const startWidth = widths[index];
+      const move = (event: PointerEvent) => {
+        setColumnWidth(index, startWidth + event.clientX - clientX);
+      };
+      const cleanup = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", cleanup);
+        window.removeEventListener("pointercancel", cleanup);
+        document.body.classList.remove("resizing-table-column");
+        dragCleanupRef.current = () => {};
+      };
+      dragCleanupRef.current = cleanup;
+      document.body.classList.add("resizing-table-column");
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", cleanup);
+      window.addEventListener("pointercancel", cleanup);
+    },
+    [setColumnWidth, widths],
+  );
+
+  const resetColumnWidth = useCallback(
+    (index: number) => setColumnWidth(index, columns[index].defaultWidth),
+    [columns, setColumnWidth],
+  );
+  const gridTemplateColumns = useMemo(
+    () => `${widths.map((width) => `${width}px`).join(" ")} minmax(0, 1fr)`,
+    [widths],
+  );
+  const minimumTableWidth = widths.reduce((total, width) => total + width, 0);
+
+  return {
+    widths,
+    gridTemplateColumns,
+    minimumTableWidth,
+    beginColumnResize,
+    resetColumnWidth,
+    setColumnWidth,
+  };
+}
+
+function ResizableMatrixHeader({
+  columns,
+  widths,
+  gridTemplateColumns,
+  beginColumnResize,
+  resetColumnWidth,
+  setColumnWidth,
+}: {
+  columns: MatrixColumnDefinition[];
+  widths: number[];
+  gridTemplateColumns: string;
+  beginColumnResize: (index: number, clientX: number) => void;
+  resetColumnWidth: (index: number) => void;
+  setColumnWidth: (index: number, width: number) => void;
+}) {
+  return (
+    <div className="cell-table-head" role="row" style={{ gridTemplateColumns }}>
+      {columns.map((column, index) => (
+        <span key={column.label} role="columnheader">
+          {column.label}
+          <i
+            className="cell-column-resizer"
+            role="separator"
+            aria-label={`Resize ${column.label} column`}
+            aria-orientation="vertical"
+            aria-valuemin={column.minWidth}
+            aria-valuemax={column.maxWidth}
+            aria-valuenow={widths[index]}
+            tabIndex={0}
+            title="Drag to resize · Double-click to reset"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              beginColumnResize(index, event.clientX);
+            }}
+            onDoubleClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              resetColumnWidth(index);
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+                return;
+              }
+              event.preventDefault();
+              setColumnWidth(
+                index,
+                widths[index] + (event.key === "ArrowRight" ? 8 : -8),
+              );
+            }}
+          />
+        </span>
+      ))}
+    </div>
+  );
+}
 
 interface BottomPanelProps {
   dataset: IsoXmlDataset;
@@ -360,6 +522,7 @@ function TimeLogMatrix({
   const channelIndex = timeLog.channels.findIndex(
     (candidate) => candidate.channelId === channel.channelId,
   );
+  const columns = useResizableMatrixColumns(timeLogMatrixColumns);
   // TanStack Virtual intentionally exposes mutable instance methods.
   // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
@@ -375,71 +538,65 @@ function TimeLogMatrix({
       role="table"
       aria-label="Executed time-log records"
     >
-      <div className="cell-table-head" role="row">
-        {[
-          "Record",
-          "Time",
-          "Latitude",
-          "Longitude",
-          "Position",
-          "Raw int32",
-          "Display value",
-          "Unit",
-        ].map((header) => (
-          <span key={header} role="columnheader">
-            {header}
-          </span>
-        ))}
-      </div>
       <div className="cell-table-scroll" ref={scrollRef}>
         <div
-          style={{ height: virtualizer.getTotalSize(), position: "relative" }}
+          className="cell-table-width"
+          style={{ minWidth: columns.minimumTableWidth }}
         >
-          {virtualizer.getVirtualItems().map((virtualRow) => {
-            const index = virtualRow.index;
-            const present = Boolean(
-              timeLog.valuePresent[channelIndex]?.[index],
-            );
-            const raw = present
-              ? timeLog.rawValues[channelIndex][index]
-              : undefined;
-            const decoded =
-              raw === undefined
-                ? undefined
-                : decodeValue(raw, channel.presentation);
-            const values = [
-              index + 1,
-              new Date(timeLog.timestamps[index]).toLocaleTimeString(),
-              Number.isFinite(timeLog.latitudes[index])
-                ? timeLog.latitudes[index].toFixed(7)
-                : "—",
-              Number.isFinite(timeLog.longitudes[index])
-                ? timeLog.longitudes[index].toFixed(7)
-                : "—",
-              timeLog.validPositions[index]
-                ? `Valid · ${timeLog.positionStatus[index]}`
-                : "Invalid",
-              raw ?? "—",
-              decoded?.formattedValue ?? "—",
-              channel.unit ?? "—",
-            ];
-            return (
-              <button
-                type="button"
-                className={`cell-table-row ${index === selectedRecordIndex ? "active" : ""}`}
-                key={index}
-                onClick={() => setSelectedRecord(index)}
-                style={{ transform: `translateY(${virtualRow.start}px)` }}
-                role="row"
-              >
-                {values.map((value, valueIndex) => (
-                  <span key={valueIndex} role="cell">
-                    {value}
-                  </span>
-                ))}
-              </button>
-            );
-          })}
+          <ResizableMatrixHeader columns={timeLogMatrixColumns} {...columns} />
+          <div
+            className="cell-table-virtual-body"
+            style={{ height: virtualizer.getTotalSize() }}
+          >
+            {virtualizer.getVirtualItems().map((virtualRow) => {
+              const index = virtualRow.index;
+              const present = Boolean(
+                timeLog.valuePresent[channelIndex]?.[index],
+              );
+              const raw = present
+                ? timeLog.rawValues[channelIndex][index]
+                : undefined;
+              const decoded =
+                raw === undefined
+                  ? undefined
+                  : decodeValue(raw, channel.presentation);
+              const values = [
+                index + 1,
+                new Date(timeLog.timestamps[index]).toLocaleTimeString(),
+                Number.isFinite(timeLog.latitudes[index])
+                  ? timeLog.latitudes[index].toFixed(7)
+                  : "—",
+                Number.isFinite(timeLog.longitudes[index])
+                  ? timeLog.longitudes[index].toFixed(7)
+                  : "—",
+                timeLog.validPositions[index]
+                  ? `Valid · ${timeLog.positionStatus[index]}`
+                  : "Invalid",
+                raw ?? "—",
+                decoded?.formattedValue ?? "—",
+                channel.unit ?? "—",
+              ];
+              return (
+                <button
+                  type="button"
+                  className={`cell-table-row ${index === selectedRecordIndex ? "active" : ""}`}
+                  key={index}
+                  onClick={() => setSelectedRecord(index)}
+                  style={{
+                    gridTemplateColumns: columns.gridTemplateColumns,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                  role="row"
+                >
+                  {values.map((value, valueIndex) => (
+                    <span key={valueIndex} role="cell">
+                      {value}
+                    </span>
+                  ))}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
@@ -465,6 +622,7 @@ function CellMatrix({
           grid.decodedCellCount,
           grid.rawValues[activeIndex]?.length ?? 0,
         );
+  const columns = useResizableMatrixColumns(gridMatrixColumns);
   // TanStack Virtual intentionally exposes mutable instance methods.
   // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
@@ -480,57 +638,51 @@ function CellMatrix({
       role="table"
       aria-label="Grid channel cell values"
     >
-      <div className="cell-table-head" role="row">
-        {[
-          "Cell",
-          "Row",
-          "Column",
-          "Layout",
-          "Raw int32",
-          "Display value",
-          "Unit",
-          "Product",
-        ].map((header) => (
-          <span key={header} role="columnheader">
-            {header}
-          </span>
-        ))}
-      </div>
       <div className="cell-table-scroll" ref={scrollRef}>
         <div
-          style={{ height: virtualizer.getTotalSize(), position: "relative" }}
+          className="cell-table-width"
+          style={{ minWidth: columns.minimumTableWidth }}
         >
-          {virtualizer.getVirtualItems().map((virtualRow) => {
-            const index = virtualRow.index;
-            const raw = grid.rawValues[activeIndex][index];
-            const decoded = decodeValue(raw, channel.presentation);
-            const values = [
-              index,
-              Math.floor(index / grid.columns) + 1,
-              (index % grid.columns) + 1,
-              grid.gridType === 2 ? "Direct" : grid.treatmentZoneCodes[index],
-              decoded.rawValue,
-              decoded.formattedValue,
-              channel.unit ?? "—",
-              channel.productName ?? "Unresolved",
-            ];
-            return (
-              <button
-                type="button"
-                className={`cell-table-row ${index === selectedCellIndex ? "active" : ""}`}
-                key={index}
-                onClick={() => setSelectedCell(index)}
-                style={{ transform: `translateY(${virtualRow.start}px)` }}
-                role="row"
-              >
-                {values.map((value, valueIndex) => (
-                  <span key={valueIndex} role="cell">
-                    {value}
-                  </span>
-                ))}
-              </button>
-            );
-          })}
+          <ResizableMatrixHeader columns={gridMatrixColumns} {...columns} />
+          <div
+            className="cell-table-virtual-body"
+            style={{ height: virtualizer.getTotalSize() }}
+          >
+            {virtualizer.getVirtualItems().map((virtualRow) => {
+              const index = virtualRow.index;
+              const raw = grid.rawValues[activeIndex][index];
+              const decoded = decodeValue(raw, channel.presentation);
+              const values = [
+                index,
+                Math.floor(index / grid.columns) + 1,
+                (index % grid.columns) + 1,
+                grid.gridType === 2 ? "Direct" : grid.treatmentZoneCodes[index],
+                decoded.rawValue,
+                decoded.formattedValue,
+                channel.unit ?? "—",
+                channel.productName ?? "Unresolved",
+              ];
+              return (
+                <button
+                  type="button"
+                  className={`cell-table-row ${index === selectedCellIndex ? "active" : ""}`}
+                  key={index}
+                  onClick={() => setSelectedCell(index)}
+                  style={{
+                    gridTemplateColumns: columns.gridTemplateColumns,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                  role="row"
+                >
+                  {values.map((value, valueIndex) => (
+                    <span key={valueIndex} role="cell">
+                      {value}
+                    </span>
+                  ))}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
