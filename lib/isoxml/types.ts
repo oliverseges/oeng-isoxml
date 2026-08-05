@@ -137,6 +137,74 @@ export interface DecodedGrid {
   validationIssues: ValidationIssue[];
 }
 
+export interface TimeLogChannel {
+  channelId: string;
+  dlvIndex: number;
+  ddi: number;
+  ddiDisplay: string;
+  ddiName: string;
+  dictionarySource: string;
+  deviceElementId?: string;
+  deviceElementName?: string;
+  deviceId?: string;
+  deviceName?: string;
+  processDataObjectId?: string;
+  valuePresentationId?: string;
+  presentation: ValuePresentation;
+  unit?: string;
+  label: string;
+}
+
+export type TimeLogAdapterSelectionMode = "automatic" | "manual" | "unresolved";
+
+export interface TimeLogAdapterCandidate {
+  id: string;
+  label: string;
+  description: string;
+  score: number;
+  compatible: boolean;
+  autoSelectable: boolean;
+  reason: string;
+}
+
+export interface TimeLogAdapterSelection {
+  adapterId?: string;
+  adapterLabel?: string;
+  mode: TimeLogAdapterSelectionMode;
+  confidence: "high" | "medium" | "low" | "none";
+  reason: string;
+  candidates: TimeLogAdapterCandidate[];
+}
+
+export interface DecodedTimeLog {
+  instanceId: string;
+  sourceObjectUid: string;
+  taskInstanceId: string;
+  taskId: string;
+  id: string;
+  filename: string;
+  headerFilename: string;
+  sourceBinaryKey?: string;
+  sourceHeaderKey?: string;
+  timeLogType: number;
+  adapterSelection: TimeLogAdapterSelection;
+  channels: TimeLogChannel[];
+  timestamps: Float64Array;
+  latitudes: Float64Array;
+  longitudes: Float64Array;
+  positionStatus: Uint8Array;
+  validPositions: Uint8Array;
+  rawValues: Int32Array[];
+  valuePresent: Uint8Array[];
+  recordByteOffsets: Uint32Array;
+  decodedRecordCount: number;
+  validPositionCount: number;
+  binaryLength: number;
+  decodedByteLength: number;
+  bbox?: [west: number, south: number, east: number, north: number];
+  validationIssues: ValidationIssue[];
+}
+
 export interface TaskSummary {
   /** Stable identity for this parsed declaration, even when ISO IDs repeat. */
   instanceId: string;
@@ -153,6 +221,7 @@ export interface TaskSummary {
   workerId?: string;
   workerName?: string;
   gridIds: string[];
+  timeLogIds: string[];
   productIds: string[];
   ddiCount: number;
   issueCount: number;
@@ -177,6 +246,7 @@ export interface IsoXmlDataset {
   objects: IsoXmlObject[];
   tasks: TaskSummary[];
   grids: DecodedGrid[];
+  timeLogs: DecodedTimeLog[];
   boundaries: SpatialBoundary[];
   issues: ValidationIssue[];
   rawXmlByFile: Record<string, string>;
@@ -215,6 +285,14 @@ export type WorkerRequest = {
   files: WorkerInputFile[];
   sourceLabel: string;
 };
+
+export interface TimeLogAdapterWorkerRequest {
+  type: "redecode-timelog";
+  requestId: string;
+  dataset: IsoXmlDataset;
+  timeLogInstanceId: string;
+  adapterId?: string;
+}
 
 export type WorkerResponse =
   | {

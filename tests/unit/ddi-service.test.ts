@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   describeDdi,
+  formatDdi,
   ISOBUS_DDI_COUNT,
   ISOBUS_DICTIONARY_VERSION,
   parseDdi,
@@ -14,6 +15,12 @@ import {
 import type { IsoXmlDataset } from "@/lib/isoxml/types";
 
 describe("DDI service", () => {
+  it("parses ISOXML's four-character DDI attributes as hexadecimal", () => {
+    expect(parseDdi("0051")).toBe(0x51);
+    expect(parseDdi("008D")).toBe(0x8d);
+    expect(formatDdi(0x8d)).toBe("008D");
+  });
+
   it("resolves zero-padded DDI 0006 to the official mass-per-area label", () => {
     const ddi = parseDdi("0006");
 

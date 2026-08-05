@@ -3,6 +3,7 @@
 import { workerRequestSchema } from "./object-model";
 import { buildDataset } from "./pipeline";
 import type { WorkerRequest, WorkerResponse } from "./types";
+import { datasetTransferables } from "./worker-transfer";
 
 const workerScope: DedicatedWorkerGlobalScope =
   self as unknown as DedicatedWorkerGlobalScope;
@@ -35,18 +36,8 @@ workerScope.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         workerScope.postMessage(response);
       },
     );
-    const transfer = new Set<ArrayBuffer>();
-    for (const bytes of Object.values(dataset.rawBytesByFile)) {
-      transfer.add(bytes.buffer as ArrayBuffer);
-    }
-    for (const grid of dataset.grids) {
-      transfer.add(grid.treatmentZoneCodes.buffer as ArrayBuffer);
-      grid.rawValues.forEach((values) =>
-        transfer.add(values.buffer as ArrayBuffer),
-      );
-    }
     const response: WorkerResponse = { type: "complete", requestId, dataset };
-    workerScope.postMessage(response, [...transfer]);
+    workerScope.postMessage(response, datasetTransferables(dataset));
   } catch (error) {
     const response: WorkerResponse = {
       type: "error",

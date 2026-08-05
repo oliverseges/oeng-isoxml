@@ -22,15 +22,8 @@ import type {
   IsoXmlDataset,
   IsoXmlObject,
 } from "@/lib/isoxml/types";
-import { useViewerStore, type InspectorTab } from "./store";
-
-const tabs: Array<{ id: InspectorTab; label: string }> = [
-  { id: "overview", label: "Overview" },
-  { id: "attributes", label: "Attributes" },
-  { id: "relationships", label: "Relations" },
-  { id: "source", label: "Source" },
-  { id: "validation", label: "Validation" },
-];
+import { INSPECTOR_TABS, visibleInspectorTab } from "./inspector-tabs";
+import { useViewerStore } from "./store";
 
 function sourceBytes(
   dataset: IsoXmlDataset,
@@ -79,6 +72,7 @@ export function Inspector({ dataset, grid, channel }: InspectorProps) {
   const setSelectedCell = useViewerStore((state) => state.setSelectedCell);
   const inspectorTab = useViewerStore((state) => state.inspectorTab);
   const setInspectorTab = useViewerStore((state) => state.setInspectorTab);
+  const activeInspectorTab = visibleInspectorTab(inspectorTab, false);
   const channelIndex = grid.channels.findIndex(
     (candidate) => candidate.channelId === channel.channelId,
   );
@@ -278,12 +272,12 @@ export function Inspector({ dataset, grid, channel }: InspectorProps) {
         role="tablist"
         aria-label="Inspector views"
       >
-        {tabs.map((tab) => (
+        {INSPECTOR_TABS.map((tab) => (
           <button
             type="button"
             role="tab"
-            aria-selected={inspectorTab === tab.id}
-            className={inspectorTab === tab.id ? "active" : ""}
+            aria-selected={activeInspectorTab === tab.id}
+            className={activeInspectorTab === tab.id ? "active" : ""}
             key={tab.id}
             onClick={() => setInspectorTab(tab.id)}
           >
@@ -292,7 +286,7 @@ export function Inspector({ dataset, grid, channel }: InspectorProps) {
         ))}
       </div>
       <div className="inspector-scroll">
-        {inspectorTab === "overview" && (
+        {activeInspectorTab === "overview" && (
           <>
             <section className="inspector-value-card">
               <div>
@@ -511,7 +505,7 @@ export function Inspector({ dataset, grid, channel }: InspectorProps) {
           </>
         )}
 
-        {inspectorTab === "attributes" && (
+        {activeInspectorTab === "attributes" && (
           <section className="inspector-section flush">
             <div className="section-title">
               <span>Raw PDV attributes</span>
@@ -533,7 +527,7 @@ export function Inspector({ dataset, grid, channel }: InspectorProps) {
           </section>
         )}
 
-        {inspectorTab === "relationships" && (
+        {activeInspectorTab === "relationships" && (
           <section className="relationship-list">
             {relationships.map(([type, object, description]) => {
               const typedObject = object;
@@ -561,7 +555,7 @@ export function Inspector({ dataset, grid, channel }: InspectorProps) {
           </section>
         )}
 
-        {inspectorTab === "source" && (
+        {activeInspectorTab === "source" && (
           <>
             <section className="inspector-section">
               <div className="section-title">
@@ -607,7 +601,7 @@ export function Inspector({ dataset, grid, channel }: InspectorProps) {
           </>
         )}
 
-        {inspectorTab === "validation" && (
+        {activeInspectorTab === "validation" && (
           <section className="issue-cards">
             {relatedIssues.length ? (
               relatedIssues.map((issue, issueIndex) => (

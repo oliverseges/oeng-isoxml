@@ -15,9 +15,9 @@ Status terms are deliberately specific: `yes`, `partial`, `raw`, `library` (impl
 | Repeated DDI/different PDT     | yes                     | yes              | informational note              | independent layers      | CSV                                | yes                                | yes     |
 | PDT/PAN                        | yes                     | partial          | references                      | inspector               | no                                 | yes                                | partial |
 | VPN/DVP value presentation     | yes                     | yes              | scale/offset/precision          | legend/value            | CSV                                | yes                                | yes     |
-| DVC/DET/DPD/DPT                | yes                     | partial          | references                      | inspector/relationships | limited variant ZIP                | yes                                | partial |
-| Time-log XML                   | yes as generic XML      | no               | manifest/support note           | no                      | raw only                           | yes                                | no      |
-| Time-log BIN                   | manifest                | no               | support note                    | no                      | raw only                           | yes                                | no      |
+| DVC/DET/DPD/DPT                | yes                     | scoped per DVC   | references                      | inspector/relationships | limited variant ZIP                | yes                                | partial |
+| Time-log Type 1 XML            | yes                     | PTN/DLV/DET/DDI  | counterpart/layout/references   | executed tree/inspector | channel CSV                        | yes                                | yes     |
+| Time-log Type 1 BIN            | yes                     | sparse records   | indices/truncation/resource cap | point canvas/table      | channel CSV                        | yes                                | yes     |
 | Unknown elements/attributes    | element/attribute index | n/a              | informational note              | raw source              | no                                 | exact source yes                   | yes     |
 | XSD schema validation          | no                      | no               | `not-checked`                   | no                      | no                                 | source unchanged                   | no      |
 | Public DDI metadata            | bundled snapshot        | n/a              | source/version reported         | labels/details/link     | no                                 | n/a                                | yes     |
@@ -27,7 +27,7 @@ Status terms are deliberately specific: `yes`, `partial`, `raw`, `library` (impl
 ## Authoritative inputs still required
 
 - Official ISO 11783-10 schemas and conformance material.
-- Verified grid and time-log fixtures for every additional binary profile.
+- Verified grid and time-log fixtures for every additional binary profile or type.
 - Manufacturer extension documentation.
 - Permission before distributing any licensed standards or schema content.
 

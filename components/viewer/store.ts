@@ -7,14 +7,22 @@ import type { IsoXmlDataset } from "@/lib/isoxml/types";
 
 export type BottomTab = "cells" | "files" | "issues" | "source";
 export type InspectorTab =
-  "overview" | "attributes" | "relationships" | "source" | "validation";
+  | "overview"
+  | "attributes"
+  | "relationships"
+  | "source"
+  | "validation"
+  | "adapter";
 
 interface ViewerState {
   datasetId?: string;
   recentDatasetIds: string[];
   activeTaskId?: string;
+  activeLayerKind?: "grid" | "timelog";
   activeGridInstanceId?: string;
   activeChannelId?: string;
+  activeTimeLogInstanceId?: string;
+  activeTimeLogChannelId?: string;
   selectedCellIndex?: number;
   hoveredCellIndex?: number;
   bottomTab: BottomTab;
@@ -36,6 +44,11 @@ interface ViewerState {
   selectDataset: (datasetId: string) => void;
   replaceRecentDatasetIds: (datasetIds: string[]) => void;
   setActiveChannel: (gridInstanceId: string, channelId: string) => void;
+  setActiveTimeLogChannel: (
+    timeLogInstanceId: string,
+    channelId: string,
+  ) => void;
+  setActiveTimeLog: (timeLogInstanceId: string) => void;
   setSelectedCell: (cellIndex: number | undefined) => void;
   setHoveredCell: (cellIndex: number | undefined) => void;
   setBottomTab: (tab: BottomTab) => void;
@@ -80,6 +93,9 @@ export const useViewerStore = create<ViewerState>()(
       setDataset: (dataset, remember = true) => {
         datasetRepository.put(dataset);
         const firstGrid = dataset.grids[0];
+        const firstTimeLog = (dataset.timeLogs ?? []).find(
+          (timeLog) => timeLog.channels.length,
+        );
         set((state) => ({
           datasetId: dataset.id,
           recentDatasetIds: remember
@@ -89,15 +105,27 @@ export const useViewerStore = create<ViewerState>()(
               ].slice(0, 10)
             : state.recentDatasetIds,
           activeTaskId: dataset.tasks[0]?.id,
+          activeLayerKind: firstGrid
+            ? "grid"
+            : firstTimeLog
+              ? "timelog"
+              : undefined,
           activeGridInstanceId: firstGrid?.instanceId,
           activeChannelId: firstGrid?.channels[0]?.channelId,
-          selectedCellIndex: initialCellIndex(dataset),
+          activeTimeLogInstanceId: firstGrid
+            ? undefined
+            : firstTimeLog?.instanceId,
+          activeTimeLogChannelId: firstGrid
+            ? undefined
+            : firstTimeLog?.channels[0]?.channelId,
+          selectedCellIndex: firstGrid ? initialCellIndex(dataset) : undefined,
           hoveredCellIndex: undefined,
-          bottomTab: firstGrid?.channels.length
-            ? state.bottomTab
-            : dataset.issues.length
-              ? "issues"
-              : "files",
+          bottomTab:
+            firstGrid?.channels.length || firstTimeLog?.channels.length
+              ? state.bottomTab
+              : dataset.issues.length
+                ? "issues"
+                : "files",
         }));
         if (remember) void datasetRepository.persist(dataset);
       },
@@ -105,27 +133,71 @@ export const useViewerStore = create<ViewerState>()(
         const dataset = datasetRepository.get(datasetId);
         if (!dataset) return;
         const firstGrid = dataset.grids[0];
+        const firstTimeLog = (dataset.timeLogs ?? []).find(
+          (timeLog) => timeLog.channels.length,
+        );
         set({
           datasetId,
           activeTaskId: dataset.tasks[0]?.id,
+          activeLayerKind: firstGrid
+            ? "grid"
+            : firstTimeLog
+              ? "timelog"
+              : undefined,
           activeGridInstanceId: firstGrid?.instanceId,
           activeChannelId: firstGrid?.channels[0]?.channelId,
-          selectedCellIndex: initialCellIndex(dataset),
+          activeTimeLogInstanceId: firstGrid
+            ? undefined
+            : firstTimeLog?.instanceId,
+          activeTimeLogChannelId: firstGrid
+            ? undefined
+            : firstTimeLog?.channels[0]?.channelId,
+          selectedCellIndex: firstGrid ? initialCellIndex(dataset) : undefined,
           hoveredCellIndex: undefined,
-          bottomTab: firstGrid?.channels.length
-            ? "cells"
-            : dataset.issues.length
-              ? "issues"
-              : "files",
+          bottomTab:
+            firstGrid?.channels.length || firstTimeLog?.channels.length
+              ? "cells"
+              : dataset.issues.length
+                ? "issues"
+                : "files",
         });
       },
       replaceRecentDatasetIds: (recentDatasetIds) =>
         set({ recentDatasetIds: recentDatasetIds.slice(0, 10) }),
       setActiveChannel: (gridInstanceId, channelId) =>
         set((state) => ({
+          activeLayerKind: "grid",
           activeGridInstanceId: gridInstanceId,
           activeChannelId: channelId,
+          activeTimeLogInstanceId: undefined,
+          activeTimeLogChannelId: undefined,
           selectedCellIndex: undefined,
+          bottomTab: "cells",
+          bottomCollapsed: false,
+          bottomAttentionNonce: state.bottomAttentionNonce + 1,
+        })),
+      setActiveTimeLogChannel: (timeLogInstanceId, channelId) =>
+        set((state) => ({
+          activeLayerKind: "timelog",
+          activeGridInstanceId: undefined,
+          activeChannelId: undefined,
+          activeTimeLogInstanceId: timeLogInstanceId,
+          activeTimeLogChannelId: channelId,
+          selectedCellIndex: undefined,
+          hoveredCellIndex: undefined,
+          bottomTab: "cells",
+          bottomCollapsed: false,
+          bottomAttentionNonce: state.bottomAttentionNonce + 1,
+        })),
+      setActiveTimeLog: (timeLogInstanceId) =>
+        set((state) => ({
+          activeLayerKind: "timelog",
+          activeGridInstanceId: undefined,
+          activeChannelId: undefined,
+          activeTimeLogInstanceId: timeLogInstanceId,
+          activeTimeLogChannelId: undefined,
+          selectedCellIndex: undefined,
+          hoveredCellIndex: undefined,
           bottomTab: "cells",
           bottomCollapsed: false,
           bottomAttentionNonce: state.bottomAttentionNonce + 1,

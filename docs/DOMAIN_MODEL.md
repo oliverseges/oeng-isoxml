@@ -19,7 +19,7 @@ interface IsoXmlObject {
 
 The index retains unknown elements, attributes, raw attribute strings and element order. It is not a byte-for-byte XML syntax tree: comments, processing instructions and exact mixed-text placement are available only in the preserved raw XML.
 
-`ObjectRegistry.byId` stores arrays. Duplicate IDs remain evidence and `resolveOne` returns a target only when exactly one candidate of an allowed type exists.
+`ObjectRegistry.byId` stores arrays for globally scoped IDs. DPD, DPT and DVP device-object IDs are indexed and validated inside their owning DVC; reuse by another device is therefore not a duplicate. Duplicate IDs remain evidence and resolution returns a target only when exactly one candidate of an allowed type exists in the applicable scope.
 
 ## Grid model
 
@@ -28,6 +28,10 @@ The index retains unknown elements, attributes, raw attribute strings and elemen
 A channel ID combines task, treatment zone, PDV order, DDI, product and DET evidence. DDI alone is never a channel key.
 
 Map analysis uses compact `Float64Array`/`Uint8Array` views for the active channel. Exact formatted values are decoded on demand for the hovered, selected, or visible table rows rather than allocating a display object for every cell.
+
+## Time-log model
+
+`DecodedTimeLog` stores record timestamps, coordinates, position status and binary offsets in typed arrays. Each DLV declaration becomes an independent `TimeLogChannel` with a signed raw-value array and a same-length presence mask, so an absent sparse value is distinct from a recorded zero. Valid-position masks and a bounding box support point rendering without discarding records that lack a mappable position.
 
 ## Value state
 

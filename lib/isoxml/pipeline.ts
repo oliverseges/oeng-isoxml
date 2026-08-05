@@ -9,8 +9,10 @@ import {
 import { decodeGrid } from "./grid-decoder";
 import { flattenObjects, issue } from "./object-model";
 import { buildRegistry, resolveOne } from "./reference-resolver";
+import { decodeTimeLogWithAdapters } from "./timelog-adapters";
 import type {
   DecodedGrid,
+  DecodedTimeLog,
   FileManifestEntry,
   ImportStage,
   IsoXmlDataset,
@@ -313,25 +315,56 @@ export async function buildDataset(
     }
   }
 
-  stage(onProgress, "timelogs", 0.68, "Indexing time-log files");
-  const timeLogBinaryFiles = expanded.files.filter(
-    (file) => classifyFile(file.path, file.bytes) === "timelog-binary",
-  );
-  if (timeLogBinaryFiles.length) {
-    issues.push(
-      issue({
-        severity: "info",
-        category: "support",
-        code: "TIMELOG_DECODER_ADAPTER_REQUIRED",
-        message: `${timeLogBinaryFiles.length} time-log binary file(s) are preserved but not decoded`,
-        explanation:
-          "The first vertical slice exposes the files and raw bytes without claiming a record layout.",
-        filename: timeLogBinaryFiles[0].path,
-        suggestedAction: "Install a verified time-log decoder adapter.",
-        recovered: true,
-        resultsMayBeIncomplete: true,
-      }),
-    );
+  stage(onProgress, "timelogs", 0.68, "Decoding executed time-log records");
+  const timeLogs: DecodedTimeLog[] = [];
+  const timeLogFilePaths = new Set<string>();
+  let timeLogInstanceIndex = 0;
+  for (const taskObject of taskObjects) {
+    const timeLogObjects = findObjects(taskObject.children, "TLG");
+    for (const timeLogObject of timeLogObjects) {
+      const declaredName =
+        getAttribute(timeLogObject, ["A", "Filename"]) ??
+        `TLG${String(timeLogInstanceIndex).padStart(5, "0")}`;
+      const baseName = declaredName.replace(/\.(?:xml|bin)$/i, "");
+      const binaryFilename = `${baseName}.BIN`;
+      const headerFilename = `${baseName}.XML`;
+      const declaredLength = Number(
+        getAttribute(timeLogObject, ["B", "Filelength"]),
+      );
+      const binaryFile = findPackageFile(
+        expanded.files,
+        binaryFilename,
+        declaredLength,
+      );
+      const headerFile = findPackageFile(expanded.files, headerFilename);
+      const headerRoot = headerFile
+        ? roots.find(
+            (root) =>
+              root.sourceFileKey === headerFile.storageKey &&
+              root.elementType === "TIM",
+          )
+        : undefined;
+      if (binaryFile) timeLogFilePaths.add(binaryFile.storageKey);
+      if (headerFile) timeLogFilePaths.add(headerFile.storageKey);
+      const timeLog = decodeTimeLogWithAdapters({
+        timeLogObject,
+        taskObject,
+        header: headerRoot,
+        registry,
+        binary: binaryFile?.bytes,
+        identity: {
+          timeLogInstanceId: `${timeLogObject.uid}#${timeLogInstanceIndex}`,
+          taskInstanceId: taskInstanceIds.get(taskObject) as string,
+          sourceBinaryKey: binaryFile?.storageKey,
+          sourceHeaderKey: headerFile?.storageKey,
+          filename: binaryFilename,
+          headerFilename,
+        },
+      });
+      timeLogInstanceIndex += 1;
+      timeLogs.push(timeLog);
+      issues.push(...timeLog.validationIssues);
+    }
   }
 
   stage(onProgress, "spatial", 0.74, "Building spatial boundaries");
@@ -352,6 +385,9 @@ export async function buildDataset(
     const taskGrids = grids.filter(
       (grid) => grid.taskInstanceId === instanceId,
     );
+    const taskTimeLogs = timeLogs.filter(
+      (timeLog) => timeLog.taskInstanceId === instanceId,
+    );
     const productIds = new Set(
       taskGrids.flatMap((grid) =>
         grid.channels
@@ -359,9 +395,14 @@ export async function buildDataset(
           .filter((id): id is string => Boolean(id)),
       ),
     );
-    const ddiCount = new Set(
-      taskGrids.flatMap((grid) => grid.channels.map((channel) => channel.ddi)),
-    ).size;
+    const ddiCount = new Set([
+      ...taskGrids.flatMap((grid) =>
+        grid.channels.map((channel) => channel.ddi),
+      ),
+      ...taskTimeLogs.flatMap((timeLog) =>
+        timeLog.channels.map((channel) => channel.ddi),
+      ),
+    ]).size;
     const taskId = taskObject.id ?? taskObject.uid;
     return {
       instanceId,
@@ -388,13 +429,15 @@ export async function buildDataset(
         ? getAttribute(worker, ["B", "WorkerDesignator", "Designator"])
         : undefined,
       gridIds: taskGrids.map((grid) => grid.id),
+      timeLogIds: taskTimeLogs.map((timeLog) => timeLog.id),
       productIds: [...productIds],
       ddiCount,
       issueCount: issues.filter(
         (entry) =>
           entry.severity !== "info" &&
           (entry.objectId === taskId ||
-            taskGrids.some((grid) => entry.objectId === grid.id)),
+            taskGrids.some((grid) => entry.objectId === grid.id) ||
+            taskTimeLogs.some((timeLog) => entry.objectId === timeLog.id)),
       ).length,
     };
   });
@@ -410,13 +453,23 @@ export async function buildDataset(
   for (let index = 0; index < expanded.files.length; index += 1) {
     const file = expanded.files[index];
     const kind = classifyFile(file.path, file.bytes);
-    const referencedBy = grids
-      .filter((grid) => grid.sourceBinaryKey === file.storageKey)
-      .map((grid) => grid.id);
+    const referencedBy = [
+      ...grids
+        .filter((grid) => grid.sourceBinaryKey === file.storageKey)
+        .map((grid) => grid.id),
+      ...timeLogs
+        .filter(
+          (timeLog) =>
+            timeLog.sourceBinaryKey === file.storageKey ||
+            timeLog.sourceHeaderKey === file.storageKey,
+        )
+        .map((timeLog) => timeLog.id),
+    ];
     const used =
       kind === "archive" ||
       parsedXmlPaths.has(file.storageKey) ||
       gridFilePaths.has(file.storageKey) ||
+      timeLogFilePaths.has(file.storageKey) ||
       referencedBy.length > 0;
     rawBytesByFile[file.storageKey] = file.bytes;
     files.push({
@@ -432,9 +485,15 @@ export async function buildDataset(
       checksum: await sha256(file.bytes),
       referencedBy,
       referenceTarget: referencedBy.length ? file.path : undefined,
-      parseStatus: parsedXmlPaths.has(file.path)
+      parseStatus: parsedXmlPaths.has(file.storageKey)
         ? "parsed"
-        : ["taskdata", "xml", "grid-binary", "archive"].includes(kind)
+        : [
+              "taskdata",
+              "xml",
+              "grid-binary",
+              "timelog-binary",
+              "archive",
+            ].includes(kind)
           ? "ready"
           : "unsupported",
       validationStatus: issues.some(
@@ -448,7 +507,9 @@ export async function buildDataset(
           ? "warning"
           : "valid",
       used,
-      unresolved: kind === "grid-binary" && !referencedBy.length,
+      unresolved:
+        (kind === "grid-binary" || kind === "timelog-binary") &&
+        !referencedBy.length,
       previewHex: hexPreview(file.bytes),
     });
     if (!used) {
@@ -481,6 +542,25 @@ export async function buildDataset(
           0,
         ),
       0,
+    ) +
+    timeLogs.reduce(
+      (sum, timeLog) =>
+        sum +
+        timeLog.timestamps.byteLength +
+        timeLog.latitudes.byteLength +
+        timeLog.longitudes.byteLength +
+        timeLog.positionStatus.byteLength +
+        timeLog.validPositions.byteLength +
+        timeLog.recordByteOffsets.byteLength +
+        timeLog.rawValues.reduce(
+          (channelSum, values) => channelSum + values.byteLength,
+          0,
+        ) +
+        timeLog.valuePresent.reduce(
+          (channelSum, values) => channelSum + values.byteLength,
+          0,
+        ),
+      0,
     );
   const hasErrors = issues.some((entry) => entry.severity === "error");
   const hasWarnings = issues.some((entry) => entry.severity === "warning");
@@ -503,6 +583,7 @@ export async function buildDataset(
     objects: flattenObjects(roots),
     tasks,
     grids,
+    timeLogs,
     boundaries,
     issues,
     rawXmlByFile,
@@ -524,10 +605,15 @@ export async function buildDataset(
           ? "warning"
           : "valid",
       binary: issues.some(
-        (entry) => entry.category === "grid" && entry.severity === "error",
+        (entry) =>
+          (entry.category === "grid" || entry.category === "timelog") &&
+          entry.severity === "error",
       )
         ? "invalid"
-        : issues.some((entry) => entry.category === "grid")
+        : issues.some(
+              (entry) =>
+                entry.category === "grid" || entry.category === "timelog",
+            )
           ? "warning"
           : "valid",
       viewer: "partial",

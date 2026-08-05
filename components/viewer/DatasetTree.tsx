@@ -16,15 +16,38 @@ import {
   Grid3X3,
   Info,
   Layers3,
+  ListFilter,
   Map as MapIcon,
+  Route,
   Search,
   SearchX,
+  SlidersHorizontal,
   Sprout,
   Tractor,
   Warehouse,
 } from "lucide-react";
+import {
+  OPERATION_GROUPS,
+  operationGroupsForChannel,
+  type OperationGroupId,
+} from "@/lib/isoxml/operation-groups";
+import {
+  hasExecutedChannelQualityFilters,
+  passesExecutedChannelQualityFilters,
+  SHOW_ALL_CHANNEL_FILTERS,
+  summarizeTimeLogChannel,
+  USEFUL_CHANNEL_FILTERS,
+  type ExecutedChannelQualityFilters,
+  type TimeLogChannelMetrics,
+} from "@/lib/isoxml/timelog-channel-quality";
 import type { IsoXmlDataset, IsoXmlObject } from "@/lib/isoxml/types";
 import { useViewerStore } from "./store";
+import {
+  executedChannelTreeLabel,
+  isTreeChannelActive,
+  isTreeNodeInDataScope,
+  type TreeDataScope,
+} from "./tree-selection";
 
 type TreeNode = {
   id: string;
@@ -36,6 +59,7 @@ type TreeNode = {
     | "section"
     | "task"
     | "grid"
+    | "timelog"
     | "channel"
     | "file"
     | "device"
@@ -44,8 +68,10 @@ type TreeNode = {
     | "validation"
     | "map";
   gridInstanceId?: string;
+  timeLogInstanceId?: string;
   taskInstanceId?: string;
   channelId?: string;
+  timeLogChannelId?: string;
   warning?: boolean;
   parentId?: string;
   spatial?: boolean;
@@ -53,6 +79,10 @@ type TreeNode = {
   warningMessage?: string;
   hoverLabel?: string;
   objectId?: string;
+  ddiDisplay?: string;
+  dataScope?: Exclude<TreeDataScope, "both">;
+  operationGroupIds?: OperationGroupId[];
+  qualityMetrics?: TimeLogChannelMetrics;
 };
 
 const iconByKind = {
@@ -60,6 +90,7 @@ const iconByKind = {
   section: Box,
   task: Sprout,
   grid: Grid3X3,
+  timelog: Route,
   channel: Layers3,
   file: FileCode2,
   device: Tractor,
@@ -97,15 +128,204 @@ export function DatasetTree({
   const [filterMode, setFilterMode] = useState<"all" | "issues" | "spatial">(
     "all",
   );
+  const [operationFilter, setOperationFilter] = useState<
+    "all" | OperationGroupId
+  >("all");
+  const [dataScope, setDataScope] = useState<TreeDataScope>("both");
+  const [ddiFilter, setDdiFilter] = useState("all");
+  const [qualityFilters, setQualityFilters] =
+    useState<ExecutedChannelQualityFilters>(() => ({
+      ...USEFUL_CHANNEL_FILTERS,
+    }));
+  const [deviceClassesByDdi, setDeviceClassesByDdi] = useState<
+    Record<string, number[]>
+  >({});
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const activeChannelId = useViewerStore((state) => state.activeChannelId);
+  const activeTimeLogChannelId = useViewerStore(
+    (state) => state.activeTimeLogChannelId,
+  );
+  const activeTimeLogInstanceId = useViewerStore(
+    (state) => state.activeTimeLogInstanceId,
+  );
   const setActiveChannel = useViewerStore((state) => state.setActiveChannel);
+  const setActiveTimeLogChannel = useViewerStore(
+    (state) => state.setActiveTimeLogChannel,
+  );
+  const setActiveTimeLog = useViewerStore((state) => state.setActiveTimeLog);
   const setBottomTab = useViewerStore((state) => state.setBottomTab);
   const setInspectorTab = useViewerStore((state) => state.setInspectorTab);
   const requestMapFit = useViewerStore((state) => state.requestMapFit);
-  const hasActiveFilter = filterMode !== "all" || Boolean(search.trim());
+  const executedChannels = useMemo(
+    () =>
+      (dataset.timeLogs ?? []).flatMap((timeLog) =>
+        timeLog.channels.map((channel) => ({ timeLog, channel })),
+      ),
+    [dataset.timeLogs],
+  );
+  const executedDdiKey = useMemo(
+    () =>
+      [...new Set(executedChannels.map(({ channel }) => channel.ddi))]
+        .sort((left, right) => left - right)
+        .join(","),
+    [executedChannels],
+  );
+  const channelMetricsById = useMemo(
+    () =>
+      new Map(
+        executedChannels.map(({ timeLog, channel }) => [
+          channel.channelId,
+          summarizeTimeLogChannel(timeLog, channel),
+        ]),
+      ),
+    [executedChannels],
+  );
+  const qualityVisibleChannels = useMemo(
+    () =>
+      executedChannels.filter(({ channel }) => {
+        const metrics = channelMetricsById.get(channel.channelId);
+        return (
+          metrics &&
+          passesExecutedChannelQualityFilters(metrics, qualityFilters)
+        );
+      }),
+    [channelMetricsById, executedChannels, qualityFilters],
+  );
+  const hiddenByQualityCount =
+    executedChannels.length - qualityVisibleChannels.length;
+  const qualityCounts = useMemo(() => {
+    const metrics = [...channelMetricsById.values()];
+    return {
+      empty: metrics.filter((entry) => entry.presentCount === 0).length,
+      missingPresentation: metrics.filter((entry) => entry.missingPresentation)
+        .length,
+      allZero: metrics.filter((entry) => entry.allZero).length,
+      constant: metrics.filter((entry) => entry.constantValue).length,
+      noPosition: metrics.filter((entry) => entry.noValidPosition).length,
+      singlePosition: metrics.filter((entry) => entry.singlePosition).length,
+      sparse: metrics.filter((entry) => entry.sparse).length,
+    };
+  }, [channelMetricsById]);
+  const qualityOptions: Array<{
+    key: keyof ExecutedChannelQualityFilters;
+    label: string;
+    description: string;
+    count: number;
+  }> = [
+    {
+      key: "hideEmpty",
+      label: "No recorded values",
+      description: "Hide DLV channels that never occur in the binary records.",
+      count: qualityCounts.empty,
+    },
+    {
+      key: "hideMissingPresentation",
+      label: "Missing value presentation",
+      description:
+        "Hide channels without a resolved device value presentation; raw integers remain available in Show all.",
+      count: qualityCounts.missingPresentation,
+    },
+    {
+      key: "hideAllZero",
+      label: "All values are zero",
+      description: "Uses the declared value presentation when checking zero.",
+      count: qualityCounts.allZero,
+    },
+    {
+      key: "hideConstant",
+      label: "All values are constant",
+      description: "Hide channels with one repeated displayed value.",
+      count: qualityCounts.constant,
+    },
+    {
+      key: "hideNoPosition",
+      label: "No valid location",
+      description: "Hide channels with no value attached to a valid position.",
+      count: qualityCounts.noPosition,
+    },
+    {
+      key: "hideSinglePosition",
+      label: "Only one location",
+      description:
+        "Hide channels whose valid positioned values fit within a five-metre cluster.",
+      count: qualityCounts.singlePosition,
+    },
+    {
+      key: "hideSparse",
+      label: "Fewer than three values",
+      description:
+        "Hide very sparse channels even when their positions differ.",
+      count: qualityCounts.sparse,
+    },
+  ];
+  const qualityFilterActive = hasExecutedChannelQualityFilters(qualityFilters);
+  const hasActiveFilter =
+    filterMode !== "all" ||
+    dataScope !== "both" ||
+    operationFilter !== "all" ||
+    ddiFilter !== "all" ||
+    qualityFilterActive ||
+    Boolean(search.trim());
+
+  useEffect(() => {
+    let active = true;
+    const ddis = executedDdiKey
+      ? executedDdiKey.split(",").map((value) => Number(value))
+      : [];
+    if (!ddis.length) {
+      setDeviceClassesByDdi({});
+      return;
+    }
+    void import("@/lib/isoxml/ddi-catalog").then(({ describeDdiDetails }) => {
+      if (!active) return;
+      setDeviceClassesByDdi(
+        Object.fromEntries(
+          ddis.map((ddi) => [
+            String(ddi),
+            describeDdiDetails(ddi).deviceClasses.map(
+              (deviceClass) => deviceClass.id,
+            ),
+          ]),
+        ),
+      );
+    });
+    return () => {
+      active = false;
+    };
+  }, [executedDdiKey]);
+
+  const operationCounts = useMemo(() => {
+    const counts = new Map<OperationGroupId, number>();
+    for (const { channel } of qualityVisibleChannels) {
+      for (const group of operationGroupsForChannel(
+        channel,
+        deviceClassesByDdi[String(channel.ddi)] ?? [],
+      )) {
+        counts.set(group, (counts.get(group) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [deviceClassesByDdi, qualityVisibleChannels]);
+
+  const ddiOptions = useMemo(() => {
+    const byDdi = new Map<
+      string,
+      { display: string; name: string; count: number }
+    >();
+    for (const { channel } of qualityVisibleChannels) {
+      const current = byDdi.get(channel.ddiDisplay);
+      byDdi.set(channel.ddiDisplay, {
+        display: channel.ddiDisplay,
+        name: channel.ddiName,
+        count: (current?.count ?? 0) + 1,
+      });
+    }
+    return [...byDdi.values()].sort((left, right) =>
+      left.display.localeCompare(right.display),
+    );
+  }, [qualityVisibleChannels]);
 
   useEffect(() => {
     const focusSearch = (event: KeyboardEvent) => {
@@ -284,6 +504,7 @@ export function DatasetTree({
         meta: `${task.gridIds.length} grid`,
         depth: 3,
         kind: "section",
+        dataScope: "planned",
         parentId: `task:${task.instanceId}`,
         taskInstanceId: task.instanceId,
         spatial: true,
@@ -297,6 +518,7 @@ export function DatasetTree({
           meta: `${grid.rows}×${grid.columns} · Type ${grid.gridType}`,
           depth: 4,
           kind: "grid",
+          dataScope: "planned",
           gridInstanceId: grid.instanceId,
           taskInstanceId: task.instanceId,
           warning: grid.validationIssues.some(
@@ -316,6 +538,7 @@ export function DatasetTree({
             hoverLabel: `DDI ${channel.ddiDisplay} · ${channel.ddiName}\nProduct: ${channel.productName ?? "Unresolved product"}\n${channel.presentation.unit ?? "Unit unknown"} · PDV ${channel.pdvIndex + 1}`,
             depth: 5,
             kind: "channel",
+            dataScope: "planned",
             gridInstanceId: grid.instanceId,
             taskInstanceId: task.instanceId,
             channelId: channel.channelId,
@@ -331,16 +554,87 @@ export function DatasetTree({
           });
         });
       }
-      if (taskObject && containsExecutedData(taskObject)) {
+      const taskTimeLogs = (dataset.timeLogs ?? []).filter(
+        (candidate) => candidate.taskInstanceId === task.instanceId,
+      );
+      if (
+        taskTimeLogs.length ||
+        (taskObject && containsExecutedData(taskObject))
+      ) {
         next.push({
           id: `executed:${task.instanceId}`,
           label: "Executed data",
-          meta: "Adapter required",
+          meta: taskTimeLogs.length
+            ? `${taskTimeLogs.length} ${taskTimeLogs.length === 1 ? "log" : "logs"}`
+            : "Unavailable",
           depth: 3,
           kind: "section",
+          dataScope: "executed",
           parentId: `task:${task.instanceId}`,
           taskInstanceId: task.instanceId,
+          spatial: true,
         });
+        for (const timeLog of taskTimeLogs) {
+          next.push({
+            id: `timelog:${timeLog.instanceId}`,
+            label: timeLog.id,
+            meta:
+              timeLog.adapterSelection.mode === "unresolved"
+                ? "Choose adapter"
+                : `${timeLog.decodedRecordCount.toLocaleString()} records`,
+            hoverLabel: `${timeLog.adapterSelection.adapterLabel ?? "No adapter selected"}\n${timeLog.adapterSelection.reason}`,
+            depth: 4,
+            kind: "timelog",
+            dataScope: "executed",
+            timeLogInstanceId: timeLog.instanceId,
+            taskInstanceId: task.instanceId,
+            warning:
+              timeLog.adapterSelection.mode === "unresolved" ||
+              timeLog.validationIssues.some(
+                (entry) => entry.severity !== "info",
+              ),
+            warningMessage:
+              timeLog.adapterSelection.mode === "unresolved"
+                ? timeLog.adapterSelection.reason
+                : (timeLog.validationIssues.find(
+                    (entry) => entry.severity !== "info",
+                  )?.message ?? "This time log has validation issues."),
+            parentId: `executed:${task.instanceId}`,
+            spatial: true,
+          });
+          timeLog.channels.forEach((channel) => {
+            const qualityMetrics = channelMetricsById.get(channel.channelId);
+            const presentCount = qualityMetrics?.presentCount ?? 0;
+            const operationGroupIds = operationGroupsForChannel(
+              channel,
+              deviceClassesByDdi[String(channel.ddi)] ?? [],
+            );
+            next.push({
+              id: `timelog-channel:${timeLog.instanceId}:${channel.channelId}`,
+              label: executedChannelTreeLabel(channel),
+              meta: `${channel.unit ?? "unit ?"} · ${presentCount ?? 0} values`,
+              hoverLabel: `DDI ${channel.ddiDisplay} · ${channel.ddiName}\nDevice element: ${channel.deviceElementName ?? "Unresolved element"}\nDevice: ${channel.deviceName ?? "Unresolved"}\n${channel.presentation.unit ?? "Unit unknown"}`,
+              depth: 5,
+              kind: "channel",
+              dataScope: "executed",
+              timeLogInstanceId: timeLog.instanceId,
+              taskInstanceId: task.instanceId,
+              timeLogChannelId: channel.channelId,
+              ddiDisplay: channel.ddiDisplay,
+              operationGroupIds,
+              qualityMetrics,
+              warning: channel.presentation.confidence !== "declared",
+              warningMessage:
+                channel.presentation.confidence === "missing"
+                  ? "The device value presentation is missing; raw values remain available."
+                  : channel.presentation.confidence === "invalid"
+                    ? "The declared device value presentation is invalid."
+                    : undefined,
+              parentId: `timelog:${timeLog.instanceId}`,
+              spatial: true,
+            });
+          });
+        }
       }
       next.push({
         id: `devices:${task.instanceId}`,
@@ -378,7 +672,7 @@ export function DatasetTree({
       ...node,
       hasChildren: parentIds.has(node.id),
     }));
-  }, [dataset]);
+  }, [channelMetricsById, dataset, deviceClassesByDdi]);
 
   const nodes = useMemo(() => {
     const byId = new Map(allNodes.map((node) => [node.id, node]));
@@ -386,6 +680,27 @@ export function DatasetTree({
     const directMatches = new Set(
       allNodes
         .filter((node) => {
+          if (!isTreeNodeInDataScope(node.dataScope, dataScope)) return false;
+          if (node.timeLogChannelId) {
+            if (
+              node.qualityMetrics &&
+              !passesExecutedChannelQualityFilters(
+                node.qualityMetrics,
+                qualityFilters,
+              )
+            ) {
+              return false;
+            }
+            if (
+              operationFilter !== "all" &&
+              !node.operationGroupIds?.includes(operationFilter)
+            ) {
+              return false;
+            }
+            if (ddiFilter !== "all" && node.ddiDisplay !== ddiFilter) {
+              return false;
+            }
+          }
           if (
             filterMode === "issues" &&
             !node.warning &&
@@ -420,7 +735,80 @@ export function DatasetTree({
       }
       return true;
     });
-  }, [allNodes, collapsed, filterMode, search]);
+  }, [
+    allNodes,
+    collapsed,
+    dataScope,
+    ddiFilter,
+    filterMode,
+    operationFilter,
+    qualityFilters,
+    search,
+  ]);
+
+  useEffect(() => {
+    if (dataScope === "planned") return;
+    const matches = ({ channel }: (typeof executedChannels)[number]) => {
+      if (ddiFilter !== "all" && channel.ddiDisplay !== ddiFilter) return false;
+      return (
+        operationFilter === "all" ||
+        operationGroupsForChannel(
+          channel,
+          deviceClassesByDdi[String(channel.ddi)] ?? [],
+        ).includes(operationFilter)
+      );
+    };
+    const current = executedChannels.find(
+      ({ channel }) => channel.channelId === activeTimeLogChannelId,
+    );
+    const currentVisible = qualityVisibleChannels.find(
+      ({ channel }) => channel.channelId === activeTimeLogChannelId,
+    );
+    if (currentVisible && matches(currentVisible)) {
+      return;
+    }
+    if (
+      !current &&
+      operationFilter === "all" &&
+      ddiFilter === "all" &&
+      dataScope !== "executed"
+    ) {
+      return;
+    }
+    const first = qualityVisibleChannels.find(matches);
+    if (!first) return;
+    setActiveTimeLogChannel(first.timeLog.instanceId, first.channel.channelId);
+    requestMapFit();
+  }, [
+    activeTimeLogChannelId,
+    dataScope,
+    ddiFilter,
+    deviceClassesByDdi,
+    executedChannels,
+    operationFilter,
+    qualityVisibleChannels,
+    requestMapFit,
+    setActiveTimeLogChannel,
+  ]);
+
+  useEffect(() => {
+    if (dataScope !== "planned") return;
+    const currentVisible = dataset.grids.some((grid) =>
+      grid.channels.some((channel) => channel.channelId === activeChannelId),
+    );
+    if (currentVisible) return;
+    const firstGrid = dataset.grids.find((grid) => grid.channels.length > 0);
+    const firstChannel = firstGrid?.channels[0];
+    if (!firstGrid || !firstChannel) return;
+    setActiveChannel(firstGrid.instanceId, firstChannel.channelId);
+    requestMapFit();
+  }, [
+    activeChannelId,
+    dataScope,
+    dataset.grids,
+    requestMapFit,
+    setActiveChannel,
+  ]);
 
   const expandableIds = useMemo(
     () => allNodes.filter((node) => node.hasChildren).map((node) => node.id),
@@ -437,6 +825,24 @@ export function DatasetTree({
   });
 
   const handleNode = (node: TreeNode) => {
+    if (node.timeLogChannelId && node.timeLogInstanceId) {
+      setActiveTimeLogChannel(node.timeLogInstanceId, node.timeLogChannelId);
+      requestMapFit();
+      return;
+    }
+    if (node.kind === "timelog" && node.timeLogInstanceId) {
+      const timeLog = (dataset.timeLogs ?? []).find(
+        (candidate) => candidate.instanceId === node.timeLogInstanceId,
+      );
+      const channel = timeLog?.channels[0];
+      if (timeLog && channel) {
+        setActiveTimeLogChannel(timeLog.instanceId, channel.channelId);
+      } else if (timeLog) {
+        setActiveTimeLog(timeLog.instanceId);
+      }
+      requestMapFit();
+      return;
+    }
     if (node.channelId && node.gridInstanceId) {
       setActiveChannel(node.gridInstanceId, node.channelId);
       requestMapFit();
@@ -458,7 +864,7 @@ export function DatasetTree({
     if (
       node.id === "validation" ||
       node.id === "unknown" ||
-      node.id.startsWith("executed:")
+      (node.id.startsWith("executed:") && !node.hasChildren)
     ) {
       setBottomTab("issues");
       return;
@@ -502,8 +908,20 @@ export function DatasetTree({
     }
   };
 
+  const updateQualityFilter = (
+    key: keyof ExecutedChannelQualityFilters,
+    checked: boolean,
+  ) => {
+    setQualityFilters((current) => ({ ...current, [key]: checked }));
+    setOperationFilter("all");
+    setDdiFilter("all");
+  };
+
   return (
-    <aside className="left-panel" aria-label="Dataset navigation">
+    <aside
+      className={`left-panel ${executedChannels.length ? "has-executed-filters" : ""}`}
+      aria-label="Dataset navigation"
+    >
       <div className="panel-heading">
         <div>
           <small>OBJECT BROWSER</small>
@@ -513,10 +931,14 @@ export function DatasetTree({
           className="panel-reset-button"
           type="button"
           aria-label="Clear dataset search and tree filters"
-          title="Clear search, Issues and Spatial filters"
+          title="Clear search, data scope, operation, DDI, Issues and Spatial filters"
           disabled={!hasActiveFilter}
           onClick={() => {
             setFilterMode("all");
+            setDataScope("both");
+            setOperationFilter("all");
+            setDdiFilter("all");
+            setQualityFilters({ ...SHOW_ALL_CHANNEL_FILTERS });
             onSearchChange("");
           }}
         >
@@ -537,6 +959,55 @@ export function DatasetTree({
           <kbd>Ctrl K</kbd>
         </label>
       </div>
+      {executedChannels.length > 0 && (
+        <div className="executed-filter-row" aria-label="Executed DDI filters">
+          <label title="Show the DDIs usually associated with an operation">
+            <ListFilter size={13} aria-hidden="true" />
+            <span className="sr-only">Executed operation group</span>
+            <select
+              value={operationFilter}
+              aria-label="Filter executed DDIs by operation group"
+              onChange={(event) => {
+                setOperationFilter(
+                  event.target.value as "all" | OperationGroupId,
+                );
+                setDdiFilter("all");
+              }}
+            >
+              <option value="all">
+                All operations · {executedChannels.length}
+              </option>
+              {OPERATION_GROUPS.map((group) => {
+                const count = operationCounts.get(group.id) ?? 0;
+                return (
+                  <option key={group.id} value={group.id} disabled={!count}>
+                    {group.label} · {count}
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+          <label title="Show every device element that records one DDI">
+            <Layers3 size={13} aria-hidden="true" />
+            <span className="sr-only">Individual executed DDI</span>
+            <select
+              value={ddiFilter}
+              aria-label="Filter executed channels by individual DDI"
+              onChange={(event) => {
+                setDdiFilter(event.target.value);
+                setOperationFilter("all");
+              }}
+            >
+              <option value="all">All DDIs · {ddiOptions.length}</option>
+              {ddiOptions.map((entry) => (
+                <option key={entry.display} value={entry.display}>
+                  DDI {entry.display} · {entry.name} · {entry.count}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
       <div className="tree-toolbar">
         <button
           className={filterMode === "issues" ? "active" : ""}
@@ -560,6 +1031,76 @@ export function DatasetTree({
           <MapIcon size={13} />
           Spatial
         </button>
+        <label
+          className={`tree-scope-filter ${dataScope !== "both" ? "active" : ""}`}
+          title="Show planned data, executed data, or both"
+        >
+          <span className="sr-only">Data scope</span>
+          <select
+            value={dataScope}
+            aria-label="Filter dataset tree by planned or executed data"
+            onChange={(event) =>
+              setDataScope(event.target.value as TreeDataScope)
+            }
+          >
+            <option value="both">Both</option>
+            <option value="planned">Planned</option>
+            <option value="executed">Executed</option>
+          </select>
+        </label>
+        <details className="channel-quality-menu">
+          <summary
+            className={qualityFilterActive ? "active" : ""}
+            aria-label="Configure executed channel quality filters"
+          >
+            <SlidersHorizontal size={13} />
+            Quality
+            {hiddenByQualityCount > 0 && <b>{hiddenByQualityCount}</b>}
+          </summary>
+          <div className="channel-quality-popover">
+            <div className="quality-preset-actions">
+              <button
+                type="button"
+                onClick={() => {
+                  setQualityFilters({ ...USEFUL_CHANNEL_FILTERS });
+                  setOperationFilter("all");
+                  setDdiFilter("all");
+                }}
+              >
+                Useful defaults
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setQualityFilters({ ...SHOW_ALL_CHANNEL_FILTERS });
+                  setOperationFilter("all");
+                  setDdiFilter("all");
+                }}
+              >
+                Show all
+              </button>
+            </div>
+            <div className="quality-filter-list">
+              {qualityOptions.map((option) => (
+                <label key={option.key} title={option.description}>
+                  <input
+                    type="checkbox"
+                    checked={qualityFilters[option.key]}
+                    onChange={(event) =>
+                      updateQualityFilter(option.key, event.target.checked)
+                    }
+                  />
+                  <span>{option.label}</span>
+                  <b>{option.count}</b>
+                </label>
+              ))}
+            </div>
+            <p>
+              {qualityVisibleChannels.length} of {executedChannels.length}{" "}
+              executed channels shown
+            </p>
+          </div>
+        </details>
         <button
           type="button"
           aria-label={
@@ -591,7 +1132,15 @@ export function DatasetTree({
                 node.kind === "validation" && !node.warning
                   ? Info
                   : iconByKind[node.kind];
-              const active = node.channelId === activeChannelId;
+              const active =
+                isTreeChannelActive(
+                  node,
+                  activeChannelId,
+                  activeTimeLogChannelId,
+                ) ||
+                (node.kind === "timelog" &&
+                  !activeTimeLogChannelId &&
+                  node.timeLogInstanceId === activeTimeLogInstanceId);
               return (
                 <button
                   type="button"

@@ -42,11 +42,23 @@ export function describeDdi(ddi: number): DdiSummary {
 export function parseDdi(value: string | undefined): number {
   if (!value) return -1;
   const normalized = value.trim();
-  if (/^[0-9]+$/.test(normalized)) return Number.parseInt(normalized, 10);
   if (/^0x[0-9a-f]+$/i.test(normalized)) {
     return Number.parseInt(normalized.slice(2), 16);
   }
+  // ISOXML serializes ProcessDataDDI as four hexadecimal digits, including
+  // values such as 0051 and 008D. Longer digit-only values are accepted as a
+  // readable decimal extension for non-compact documents.
+  if (/^[0-9a-f]{4}$/i.test(normalized)) {
+    return Number.parseInt(normalized, 16);
+  }
+  if (/^[0-9]+$/.test(normalized)) return Number.parseInt(normalized, 10);
   return -1;
+}
+
+export function formatDdi(ddi: number): string {
+  return ddi >= 0 && ddi <= 0xffff
+    ? ddi.toString(16).toUpperCase().padStart(4, "0")
+    : "????";
 }
 
 export function refreshDatasetDdiMetadata(
@@ -74,5 +86,28 @@ export function refreshDatasetDdiMetadata(
     });
     return gridChanged ? { ...grid, channels } : grid;
   });
-  return changed ? { ...dataset, grids } : dataset;
+  const timeLogs = (dataset.timeLogs ?? []).map((timeLog) => {
+    let timeLogChanged = false;
+    const channels = timeLog.channels.map((channel) => {
+      const ddiInfo = describeDdi(channel.ddi);
+      if (
+        channel.ddiName === ddiInfo.name &&
+        channel.dictionarySource === ddiInfo.source
+      ) {
+        return channel;
+      }
+      changed = true;
+      timeLogChanged = true;
+      return {
+        ...channel,
+        ddiName: ddiInfo.name,
+        dictionarySource: ddiInfo.source,
+        label: `DDI ${channel.ddiDisplay} · ${ddiInfo.name} · ${channel.deviceElementName ?? "Device element unresolved"}`,
+      };
+    });
+    return timeLogChanged ? { ...timeLog, channels } : timeLog;
+  });
+  return changed || !dataset.timeLogs
+    ? { ...dataset, grids, timeLogs }
+    : dataset;
 }

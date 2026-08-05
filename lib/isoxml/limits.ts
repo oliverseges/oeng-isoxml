@@ -3,4 +3,6 @@ export const MAX_PACKAGE_BYTES = 512 * 1024 * 1024;
 export const MAX_PACKAGE_FILES = 2_000;
 export const MAX_XML_CHARACTERS = 64 * 1024 * 1024;
 export const MAX_GRID_CELL_COUNT = 5_000_000;
+export const MAX_TIMELOG_RECORD_COUNT = 2_000_000;
+export const MAX_TIMELOG_VALUE_SLOTS = 10_000_000;
 export const MAX_PRESENTATION_DECIMALS = 20;

@@ -247,7 +247,7 @@ export function TopBar({
           type="button"
           onClick={onExport}
           disabled={!canExport}
-          aria-label="Export selected grid channel as CSV"
+          aria-label="Export selected data channel as CSV"
           title="Export active channel as CSV"
         >
           <Download size={16} />

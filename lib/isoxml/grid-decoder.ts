@@ -1,4 +1,4 @@
-import { describeDdi, parseDdi } from "./ddi-service";
+import { describeDdi, formatDdi, parseDdi } from "./ddi-service";
 import { MAX_GRID_CELL_COUNT, MAX_PRESENTATION_DECIMALS } from "./limits";
 import { issue } from "./object-model";
 import type { ObjectRegistry } from "./reference-resolver";
@@ -142,7 +142,7 @@ function channelsForTreatmentZone(
       const product = resolveOne(registry, productId, ["PDT"]);
       const deviceElement = resolveOne(registry, deviceElementId, ["DET"]);
       const presentation = presentationFor(pdv, registry, issues);
-      const ddiDisplay = ddi >= 0 ? String(ddi).padStart(4, "0") : "????";
+      const ddiDisplay = formatDdi(ddi);
       const productName = product
         ? getAttribute(product, ["B", "ProductDesignator", "Designator"])
         : undefined;

@@ -1,6 +1,6 @@
 # OENG ISOXML Studio
 
-A browser-first engineering workspace for inspecting ISOXML task data. The current production vertical slice imports local files and ZIP packages; preserves raw XML and bytes; resolves core task/product/device/value-presentation relationships; decodes a documented Type 2 multi-PDV grid profile; renders channels through one Leaflet canvas; and traces a selected value back to its XML object and binary offset.
+A browser-first engineering workspace for inspecting ISOXML task data. The current production vertical slice imports local files and ZIP packages; preserves raw XML and bytes; resolves core task/product/device/value-presentation relationships; decodes a documented Type 2 multi-PDV grid profile and Type 1 time logs; renders planned and executed channels through Leaflet canvases; and traces a selected value back to its XML object and binary offset.
 
 **[Try OENG ISOXML Studio in your browser](https://oliverseges.github.io/oeng-isoxml/)** — the bundled synthetic demo opens automatically, and files you import remain in your browser.
 
@@ -13,12 +13,16 @@ This project does **not** claim ISO 11783 conformance. The bundled public DDI me
 - Exact raw XML preservation plus an ordered element/attribute object index. Comments, processing instructions and mixed-text placement are not modeled separately.
 - Duplicate/broken reference diagnostics.
 - Compact Type 2 grid decoding with ordered Int32LE PDVs and typed-array column storage.
+- Native time-log adapter registry with evidence-scored automatic selection, a dedicated inspector tab with per-adapter probe evidence, a manual chooser for uncertain layouts, and Type 1 PTN/DLV decoding.
 - Three PDVs per cell and repeated DDI channels with different products.
 - Raw integer preservation and decimal-safe VPN/DVP scaling.
-- Canvas grid rendering on Leaflet, cell hover, a removable coordinate pin, field boundary, and optional streets/satellite backgrounds.
+- Canvas grid and executed-point rendering on Leaflet, complete value cards on cell/point hover, persistent click selection, field boundary, described map controls, and streets/satellite backgrounds retained through the full supported zoom range.
+- Executed-channel filtering by exact DDI, evidence-based operation presets, and configurable usefulness checks for empty, missing-presentation, all-zero, constant, unpositioned, single-location and sparse channels.
+- Dataset-tree scope filtering for planned data, executed data, or both, combinable with Issues, Spatial and search filters.
+- Executed tree rows show the DDI code and dictionary name; device context remains available in the row description.
 - Product, DET, PDV, VPN and binary-offset inspection.
 - All 765 public DDI entries from ISOBUS Data Dictionary version 2026050501, including definitions, units, bit resolutions, ranges, device classes and links to the correct official record.
-- Manifest hashes, severity-sorted validation details, multi-file raw source, active-channel CSV export and map PNG export.
+- Manifest hashes, severity-sorted validation details, multi-file raw source, active planned/executed-channel CSV export and planned-map PNG export.
 - Non-destructive package variants: remove tasks, grids or Type 2 PDVs; add a
   DET to an existing DVC; remap DET references; or merge compatible single-grid
   tasks. Generated ZIPs are downloaded, re-imported, selected for preview and
@@ -70,7 +74,7 @@ The UI uses technically specific identities: a process-data layer is keyed by DD
 
 ## Resource limits
 
-Imports are intentionally bounded for browser safety: 128 MiB per selected or expanded file, 512 MiB of retained package data, 2,000 retained files, 64 MiB of XML text, 5,000,000 declared grid cells, and 20 value-presentation decimal places. Recent-dataset persistence has separate limits documented in [Security and privacy](docs/SECURITY_AND_PRIVACY.md).
+Imports are intentionally bounded for browser safety: 128 MiB per selected or expanded file, 512 MiB of retained package data, 2,000 retained files, 64 MiB of XML text, 5,000,000 declared grid cells, 2,000,000 decoded time-log records, 10,000,000 decoded time-log value slots, and 20 value-presentation decimal places. Recent-dataset persistence has separate limits documented in [Security and privacy](docs/SECURITY_AND_PRIVACY.md).
 
 ## Synthetic fixture
 

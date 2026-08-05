@@ -17,8 +17,10 @@ import {
 import { decodeValue } from "@/lib/isoxml/value-decoder";
 import type {
   DecodedGrid,
+  DecodedTimeLog,
   GridChannel,
   IsoXmlDataset,
+  TimeLogChannel,
 } from "@/lib/isoxml/types";
 import { copyTextToClipboard } from "@/lib/client/clipboard";
 import { useViewerStore, type BottomTab } from "./store";
@@ -46,9 +48,17 @@ interface BottomPanelProps {
   dataset: IsoXmlDataset;
   grid?: DecodedGrid;
   channel?: GridChannel;
+  timeLog?: DecodedTimeLog;
+  timeLogChannel?: TimeLogChannel;
 }
 
-export function BottomPanel({ dataset, grid, channel }: BottomPanelProps) {
+export function BottomPanel({
+  dataset,
+  grid,
+  channel,
+  timeLog,
+  timeLogChannel,
+}: BottomPanelProps) {
   const bottomTab = useViewerStore((state) => state.bottomTab);
   const bottomAttentionNonce = useViewerStore(
     (state) => state.bottomAttentionNonce,
@@ -123,12 +133,17 @@ export function BottomPanel({ dataset, grid, channel }: BottomPanelProps) {
     >
       <div className="bottom-tabs" role="tablist" aria-label="Data panel views">
         {tabs
-          .filter((tab) => tab.id !== "cells" || (grid && channel))
+          .filter(
+            (tab) =>
+              tab.id !== "cells" ||
+              (grid && channel) ||
+              (timeLog && timeLogChannel),
+          )
           .map((tab) => {
             const Icon = tab.icon;
             const count =
               tab.id === "cells"
-                ? grid?.decodedCellCount
+                ? (grid?.decodedCellCount ?? timeLog?.decodedRecordCount)
                 : tab.id === "files"
                   ? dataset.files.length
                   : tab.id === "issues"
@@ -144,16 +159,19 @@ export function BottomPanel({ dataset, grid, channel }: BottomPanelProps) {
                 onClick={() => setBottomTab(tab.id)}
               >
                 <Icon size={13} />
-                {tab.label}
+                {tab.id === "cells" && timeLog ? "Records" : tab.label}
                 {count !== undefined && <span>{count}</span>}
               </button>
             );
           })}
         <div className="bottom-tab-spacer" />
-        {channel && (
+        {(channel || timeLogChannel) && (
           <div className="bottom-channel-label">
-            <span className="layer-swatch" />
-            DDI {channel.ddiDisplay} · {channel.productName}
+            <span
+              className={`layer-swatch ${timeLogChannel ? "executed" : ""}`}
+            />
+            DDI {channel?.ddiDisplay ?? timeLogChannel?.ddiDisplay} ·{" "}
+            {channel?.productName ?? timeLogChannel?.deviceElementName}
           </div>
         )}
         <button
@@ -168,6 +186,9 @@ export function BottomPanel({ dataset, grid, channel }: BottomPanelProps) {
       <div className="bottom-content">
         {bottomTab === "cells" && grid && channel && (
           <CellMatrix grid={grid} channel={channel} activeIndex={activeIndex} />
+        )}
+        {bottomTab === "cells" && timeLog && timeLogChannel && (
+          <TimeLogMatrix timeLog={timeLog} channel={timeLogChannel} />
         )}
         {bottomTab === "files" && (
           <div className="file-table">
@@ -321,6 +342,107 @@ export function BottomPanel({ dataset, grid, channel }: BottomPanelProps) {
         )}
       </div>
     </section>
+  );
+}
+
+function TimeLogMatrix({
+  timeLog,
+  channel,
+}: {
+  timeLog: DecodedTimeLog;
+  channel: TimeLogChannel;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const selectedRecordIndex = useViewerStore(
+    (state) => state.selectedCellIndex,
+  );
+  const setSelectedRecord = useViewerStore((state) => state.setSelectedCell);
+  const channelIndex = timeLog.channels.findIndex(
+    (candidate) => candidate.channelId === channel.channelId,
+  );
+  // TanStack Virtual intentionally exposes mutable instance methods.
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const virtualizer = useVirtualizer({
+    count: timeLog.decodedRecordCount,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 30,
+    overscan: 12,
+  });
+
+  return (
+    <div
+      className="cell-table"
+      role="table"
+      aria-label="Executed time-log records"
+    >
+      <div className="cell-table-head" role="row">
+        {[
+          "Record",
+          "Time",
+          "Latitude",
+          "Longitude",
+          "Position",
+          "Raw int32",
+          "Display value",
+          "Unit",
+        ].map((header) => (
+          <span key={header} role="columnheader">
+            {header}
+          </span>
+        ))}
+      </div>
+      <div className="cell-table-scroll" ref={scrollRef}>
+        <div
+          style={{ height: virtualizer.getTotalSize(), position: "relative" }}
+        >
+          {virtualizer.getVirtualItems().map((virtualRow) => {
+            const index = virtualRow.index;
+            const present = Boolean(
+              timeLog.valuePresent[channelIndex]?.[index],
+            );
+            const raw = present
+              ? timeLog.rawValues[channelIndex][index]
+              : undefined;
+            const decoded =
+              raw === undefined
+                ? undefined
+                : decodeValue(raw, channel.presentation);
+            const values = [
+              index + 1,
+              new Date(timeLog.timestamps[index]).toLocaleTimeString(),
+              Number.isFinite(timeLog.latitudes[index])
+                ? timeLog.latitudes[index].toFixed(7)
+                : "—",
+              Number.isFinite(timeLog.longitudes[index])
+                ? timeLog.longitudes[index].toFixed(7)
+                : "—",
+              timeLog.validPositions[index]
+                ? `Valid · ${timeLog.positionStatus[index]}`
+                : "Invalid",
+              raw ?? "—",
+              decoded?.formattedValue ?? "—",
+              channel.unit ?? "—",
+            ];
+            return (
+              <button
+                type="button"
+                className={`cell-table-row ${index === selectedRecordIndex ? "active" : ""}`}
+                key={index}
+                onClick={() => setSelectedRecord(index)}
+                style={{ transform: `translateY(${virtualRow.start}px)` }}
+                role="row"
+              >
+                {values.map((value, valueIndex) => (
+                  <span key={valueIndex} role="cell">
+                    {value}
+                  </span>
+                ))}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }
 

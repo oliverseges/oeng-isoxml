@@ -1,6 +1,12 @@
 import { decodeValue } from "./value-decoder";
 import { geographicCellBounds, geographicCellCenter } from "./spatial";
-import type { DecodedGrid, GridChannel, IsoXmlDataset } from "./types";
+import type {
+  DecodedGrid,
+  DecodedTimeLog,
+  GridChannel,
+  IsoXmlDataset,
+  TimeLogChannel,
+} from "./types";
 
 function escapeCsv(value: unknown): string {
   const string = String(value ?? "");
@@ -71,6 +77,75 @@ export function gridChannelCsv(
       decoded.formattedValue,
       channel.unit ?? "",
       "false",
+    ]);
+  }
+  return rows.map((row) => row.map(escapeCsv).join(",")).join("\r\n");
+}
+
+export function timeLogChannelCsv(
+  timeLog: DecodedTimeLog,
+  channel: TimeLogChannel,
+): string {
+  const channelIndex = timeLog.channels.findIndex(
+    (candidate) => candidate.channelId === channel.channelId,
+  );
+  if (channelIndex < 0 || !timeLog.rawValues[channelIndex]) {
+    throw new Error(
+      `Channel ${channel.channelId} does not belong to time log ${timeLog.id}.`,
+    );
+  }
+  const rows: unknown[][] = [
+    [
+      "task_id",
+      "time_log_id",
+      "source_file",
+      "record_index",
+      "timestamp",
+      "latitude",
+      "longitude",
+      "position_status",
+      "position_valid",
+      "dlv_index",
+      "ddi",
+      "machine",
+      "device_element",
+      "value_present",
+      "raw_value",
+      "scaled_value",
+      "unit",
+    ],
+  ];
+  for (let index = 0; index < timeLog.decodedRecordCount; index += 1) {
+    const present = Boolean(timeLog.valuePresent[channelIndex][index]);
+    const rawValue = present
+      ? timeLog.rawValues[channelIndex][index]
+      : undefined;
+    const decoded =
+      rawValue === undefined
+        ? undefined
+        : decodeValue(rawValue, channel.presentation);
+    rows.push([
+      timeLog.taskId,
+      timeLog.id,
+      timeLog.filename,
+      index,
+      new Date(timeLog.timestamps[index]).toISOString(),
+      Number.isFinite(timeLog.latitudes[index])
+        ? timeLog.latitudes[index].toFixed(7)
+        : "",
+      Number.isFinite(timeLog.longitudes[index])
+        ? timeLog.longitudes[index].toFixed(7)
+        : "",
+      timeLog.positionStatus[index],
+      Boolean(timeLog.validPositions[index]),
+      channel.dlvIndex,
+      channel.ddiDisplay,
+      channel.deviceName ?? "",
+      channel.deviceElementName ?? "",
+      present,
+      rawValue ?? "",
+      decoded?.numericValue ?? "",
+      channel.unit ?? "",
     ]);
   }
   return rows.map((row) => row.map(escapeCsv).join(",")).join("\r\n");

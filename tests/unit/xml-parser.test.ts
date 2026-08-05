@@ -188,6 +188,38 @@ describe("lossless XML parser", () => {
     expect(duplicate?.message).toBe("ID DVC1 is declared 2 times");
   });
 
+  it("scopes DPD, DPT and DVP object IDs to their owning device", () => {
+    const roots = parseLosslessXml(
+      `<ISO11783_TaskData VersionMajor="4">
+        <DVC A="DVC1"><DPD A="300" B="0086" F="500"/><DVP A="500"/></DVC>
+        <DVC A="DVC2"><DPT A="300" B="0086" E="500"/><DVP A="500"/></DVC>
+      </ISO11783_TaskData>`,
+      "TASKDATA.XML",
+    );
+
+    const { issues } = buildRegistry(roots);
+
+    expect(issues.some((issue) => issue.code === "REF_DUPLICATE_ID")).toBe(
+      false,
+    );
+    expect(issues.some((issue) => issue.code === "REF_BROKEN")).toBe(false);
+  });
+
+  it("still reports duplicate device object IDs inside one device pool", () => {
+    const roots = parseLosslessXml(
+      `<ISO11783_TaskData VersionMajor="4">
+        <DVC A="DVC1"><DPD A="300" B="0086"/><DPT A="300" B="0087"/></DVC>
+      </ISO11783_TaskData>`,
+      "TASKDATA.XML",
+    );
+
+    const duplicate = buildRegistry(roots).issues.find(
+      (issue) => issue.code === "REF_DUPLICATE_ID",
+    );
+
+    expect(duplicate?.message).toBe("ID 300 is declared 2 times");
+  });
+
   it("refreshes issue-derived task, file, and support metadata", () => {
     const roots = parseLosslessXml(
       `<ISO11783_TaskData VersionMajor="4"><TSK A="TSK1"/><TSK A="TSK1"/></ISO11783_TaskData>`,

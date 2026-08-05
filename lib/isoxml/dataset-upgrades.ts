@@ -44,15 +44,19 @@ export function refreshDatasetReferenceMetadata(
   const referenceWarnings = referenceIssues.some(
     (entry) => entry.severity === "warning",
   );
-  const gridIssues = issues.filter((entry) => entry.category === "grid");
+  const binaryIssues = issues.filter(
+    (entry) => entry.category === "grid" || entry.category === "timelog",
+  );
   const tasks = (dataset.tasks ?? []).map((task, index) => ({
     ...task,
     instanceId: task.instanceId ?? `${task.objectUid}#${index}`,
+    timeLogIds: task.timeLogIds ?? [],
     issueCount: issues.filter(
       (entry) =>
         entry.severity !== "info" &&
         (entry.objectId === task.id ||
-          task.gridIds.includes(entry.objectId ?? "")),
+          task.gridIds.includes(entry.objectId ?? "") ||
+          task.timeLogIds.includes(entry.objectId ?? "")),
     ).length,
   }));
   const grids = (dataset.grids ?? []).map((grid, index) => ({
@@ -62,6 +66,25 @@ export function refreshDatasetReferenceMetadata(
       grid.taskInstanceId ??
       tasks.find((task) => task.id === grid.taskId)?.instanceId ??
       grid.taskId,
+  }));
+  const timeLogs = (dataset.timeLogs ?? []).map((timeLog) => ({
+    ...timeLog,
+    adapterSelection: timeLog.adapterSelection ?? {
+      adapterId: timeLog.timeLogType === 1 ? "native-isoxml-type-1" : undefined,
+      adapterLabel:
+        timeLog.timeLogType === 1 ? "Native ISOXML Type 1" : undefined,
+      mode:
+        timeLog.timeLogType === 1
+          ? ("automatic" as const)
+          : ("unresolved" as const),
+      confidence:
+        timeLog.timeLogType === 1 ? ("medium" as const) : ("none" as const),
+      reason:
+        timeLog.timeLogType === 1
+          ? "Restored from an earlier viewer version and assigned to the native Type 1 adapter."
+          : "No decoder adapter selection was stored with this dataset.",
+      candidates: [],
+    },
   }));
   return {
     ...dataset,
@@ -89,6 +112,7 @@ export function refreshDatasetReferenceMetadata(
       : {}),
     ...(dataset.tasks ? { tasks } : {}),
     ...(dataset.grids ? { grids } : {}),
+    timeLogs,
     ...(dataset.supportSummary
       ? {
           supportSummary: {
@@ -103,9 +127,9 @@ export function refreshDatasetReferenceMetadata(
               : referenceWarnings
                 ? ("warning" as const)
                 : ("valid" as const),
-            binary: gridIssues.some((entry) => entry.severity === "error")
+            binary: binaryIssues.some((entry) => entry.severity === "error")
               ? ("invalid" as const)
-              : gridIssues.some((entry) => entry.severity === "warning")
+              : binaryIssues.some((entry) => entry.severity === "warning")
                 ? ("warning" as const)
                 : ("valid" as const),
           },

@@ -571,6 +571,10 @@ a:focus-visible {
   border-right: 1px solid var(--line);
 }
 
+.left-panel.has-executed-filters {
+  grid-template-rows: 54px 42px 38px 35px minmax(0, 1fr) 28px;
+}
+
 .right-panel {
   display: grid;
   grid-template-rows: 66px auto minmax(0, 1fr);
@@ -647,6 +651,48 @@ a:focus-visible {
   border-bottom: 1px solid var(--line-soft);
 }
 
+.executed-filter-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 4px;
+  align-items: center;
+  padding: 4px 7px;
+  border-bottom: 1px solid var(--line-soft);
+  background: color-mix(in srgb, var(--teal) 3%, var(--panel));
+}
+
+.executed-filter-row label {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  align-items: center;
+  gap: 3px;
+  color: var(--teal);
+}
+
+.executed-filter-row select {
+  min-width: 0;
+  width: 100%;
+  height: 27px;
+  padding: 0 18px 0 5px;
+  overflow: hidden;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--panel-raised);
+  font-family: var(--font-code);
+  cursor: pointer;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.executed-filter-row select:focus {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--teal) 50%, var(--line));
+  outline: none;
+}
+
 .tree-toolbar button {
   display: flex;
   align-items: center;
@@ -665,6 +711,148 @@ a:focus-visible {
   border-color: var(--line);
   background: var(--panel-raised);
   color: var(--text);
+}
+
+.tree-scope-filter {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  border: 1px solid transparent;
+  color: var(--muted);
+  background: transparent;
+}
+
+.tree-scope-filter:hover,
+.tree-scope-filter.active,
+.tree-scope-filter:focus-within {
+  color: var(--text);
+  border-color: var(--line);
+  background: var(--panel-raised);
+}
+
+.tree-scope-filter select {
+  width: 66px;
+  height: 22px;
+  padding: 0 14px 0 5px;
+  color: currentColor;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.channel-quality-menu {
+  position: relative;
+}
+
+.channel-quality-menu summary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 6px;
+  color: var(--muted);
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  list-style: none;
+}
+
+.channel-quality-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.channel-quality-menu summary:hover,
+.channel-quality-menu summary.active,
+.channel-quality-menu[open] summary {
+  color: var(--text);
+  border-color: var(--line);
+  background: var(--panel-raised);
+}
+
+.channel-quality-menu summary b {
+  min-width: 17px;
+  padding: 1px 4px;
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 10%, transparent);
+  font-family: var(--font-code);
+  font-weight: 600;
+  text-align: center;
+}
+
+.channel-quality-popover {
+  position: absolute;
+  z-index: 1500;
+  top: calc(100% + 5px);
+  left: -126px;
+  display: grid;
+  gap: 8px;
+  width: 278px;
+  padding: 9px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
+}
+
+.quality-preset-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+
+.tree-toolbar .quality-preset-actions button {
+  justify-content: center;
+  height: 27px;
+  color: var(--text);
+  border: 1px solid var(--line);
+  background: var(--panel-raised);
+}
+
+.quality-filter-list {
+  display: grid;
+  border-block: 1px solid var(--line-soft);
+}
+
+.quality-filter-list label {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  border-bottom: 1px solid var(--line-soft);
+  cursor: pointer;
+}
+
+.quality-filter-list label:last-child {
+  border-bottom: 0;
+}
+
+.quality-filter-list input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.quality-filter-list span {
+  color: var(--text);
+}
+
+.quality-filter-list b {
+  min-width: 18px;
+  color: var(--faint);
+  font-family: var(--font-code);
+  font-weight: 500;
+  text-align: right;
+}
+
+.channel-quality-popover p {
+  margin: 0;
+  color: var(--faint);
+  font-family: var(--font-code);
+  text-align: right;
 }
 
 .tree-scroll,
@@ -891,6 +1079,48 @@ a:focus-visible {
   backdrop-filter: blur(10px);
 }
 
+.map-control-stack button[data-tooltip] {
+  position: relative;
+}
+
+.map-control-stack button[data-tooltip]::after {
+  position: absolute;
+  z-index: 900;
+  top: 50%;
+  left: calc(100% + 8px);
+  width: max-content;
+  max-width: min(280px, calc(100vw - 72px));
+  padding: 6px 8px;
+  border: 1px solid rgba(197, 214, 204, 0.28);
+  border-radius: 3px;
+  color: #e1eadf;
+  background: rgba(9, 18, 15, 0.96);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+  content: attr(data-tooltip);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.35;
+  opacity: 0;
+  pointer-events: none;
+  text-align: left;
+  transform: translate(4px, -50%);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+  white-space: normal;
+}
+
+.map-control-stack button[data-tooltip]:hover::after,
+.map-control-stack button[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+.map-control-stack button[data-tooltip][aria-expanded="true"]::after {
+  display: none;
+}
+
 .map-control-stack button.active {
   color: var(--accent-strong);
   border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
@@ -1110,6 +1340,10 @@ a:focus-visible {
   height: 8px;
   background: var(--accent);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+}
+
+.layer-swatch.executed {
+  background: #c9405e;
 }
 
 .map-legend h2 {
@@ -1388,6 +1622,264 @@ a:focus-visible {
   background: var(--accent-soft);
 }
 
+.selection-icon.executed {
+  color: #d95670;
+  border-color: color-mix(in srgb, #d95670 34%, var(--line));
+  background: color-mix(in srgb, #d95670 12%, var(--panel));
+}
+
+.inspector-value-card.executed {
+  border-color: color-mix(in srgb, #d95670 28%, var(--line));
+  background: color-mix(in srgb, #d95670 8%, var(--panel));
+}
+
+.timelog-adapter-control {
+  display: grid;
+  gap: 10px;
+  margin: 11px;
+  padding: 11px;
+  border: 1px solid color-mix(in srgb, var(--teal) 30%, var(--line));
+  background: color-mix(in srgb, var(--teal) 6%, var(--panel));
+}
+
+.timelog-adapter-control.needs-choice {
+  border-color: color-mix(in srgb, var(--amber) 48%, var(--line));
+  background: color-mix(in srgb, var(--amber) 7%, var(--panel));
+}
+
+.timelog-adapter-heading {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.timelog-adapter-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  color: var(--teal);
+  border: 1px solid color-mix(in srgb, var(--teal) 30%, var(--line));
+  background: color-mix(in srgb, var(--teal) 10%, transparent);
+}
+
+.timelog-adapter-heading > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.timelog-adapter-heading small {
+  color: var(--faint);
+  letter-spacing: 0.08em;
+}
+
+.timelog-adapter-heading strong {
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adapter-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 5px;
+  color: var(--teal);
+  border: 1px solid color-mix(in srgb, var(--teal) 28%, var(--line));
+  font-family: var(--font-code);
+  text-transform: uppercase;
+}
+
+.adapter-status.unresolved {
+  color: var(--amber);
+  border-color: color-mix(in srgb, var(--amber) 38%, var(--line));
+}
+
+.timelog-adapter-select {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+}
+
+.timelog-adapter-select select {
+  width: 100%;
+  height: 31px;
+  padding: 0 28px 0 8px;
+  overflow: hidden;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--panel-raised);
+  font-family: var(--font-code);
+  cursor: pointer;
+}
+
+.timelog-adapter-select select:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.timelog-adapter-control p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.adapter-selection-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--line-soft);
+  border-left: 1px solid var(--line-soft);
+}
+
+.adapter-selection-summary > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  padding: 7px;
+  border-right: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.adapter-selection-summary > div.wide {
+  grid-column: 1 / -1;
+}
+
+.adapter-selection-summary dt {
+  color: var(--faint);
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.adapter-selection-summary dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--font-code);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adapter-candidate-list {
+  display: grid;
+  gap: 7px;
+}
+
+.adapter-candidate-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--faint);
+  font-size: 8px;
+  letter-spacing: 0.06em;
+}
+
+.adapter-candidate-title b {
+  color: var(--teal);
+  font-family: var(--font-code);
+}
+
+.adapter-candidate-card {
+  display: grid;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid var(--line-soft);
+  background: color-mix(in srgb, var(--panel-raised) 70%, transparent);
+}
+
+.adapter-candidate-card.selected {
+  border-color: color-mix(in srgb, var(--teal) 55%, var(--line));
+  box-shadow: inset 2px 0 0 var(--teal);
+}
+
+.adapter-candidate-card.unavailable {
+  opacity: 0.68;
+}
+
+.adapter-candidate-card header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+}
+
+.adapter-candidate-card header > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.adapter-candidate-card header strong {
+  color: var(--text);
+  font-size: 10px;
+}
+
+.adapter-candidate-card header small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.adapter-candidate-card header > span {
+  padding: 2px 4px;
+  color: var(--teal);
+  border: 1px solid color-mix(in srgb, var(--teal) 30%, var(--line));
+  font-family: var(--font-code);
+  font-size: 8px;
+}
+
+.adapter-candidate-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.adapter-candidate-flags b {
+  padding: 2px 4px;
+  color: var(--faint);
+  border: 1px solid var(--line-soft);
+  font-size: 7px;
+  font-weight: 500;
+}
+
+.adapter-candidate-card.selected .adapter-candidate-flags b:first-child,
+.adapter-candidate-card.compatible .adapter-candidate-flags b {
+  color: var(--teal);
+  border-color: color-mix(in srgb, var(--teal) 25%, var(--line));
+}
+
+.adapter-candidate-card p {
+  color: var(--muted);
+}
+
+.adapter-choice-note {
+  padding: 8px;
+  color: var(--muted);
+  border-left: 2px solid var(--amber);
+  background: color-mix(in srgb, var(--amber) 7%, transparent);
+  line-height: 1.45;
+}
+
+.adapter-workspace {
+  padding: 24px;
+  text-align: center;
+}
+
+.adapter-workspace > span {
+  max-width: 520px;
+  line-height: 1.5;
+}
+
+.timelog-adapter-control.workspace {
+  width: min(560px, calc(100% - 32px));
+  margin-top: 12px;
+  text-align: left;
+}
+
 .inspector-heading strong {
   font-size: 11px;
   font-weight: 600;
@@ -1418,6 +1910,10 @@ a:focus-visible {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   overflow: hidden;
+}
+
+.inspector-tabs.has-adapter {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .bottom-tabs {
@@ -1458,7 +1954,8 @@ a:focus-visible {
 }
 
 @container object-inspector (max-width: 339px) {
-  .inspector-tabs {
+  .inspector-tabs,
+  .inspector-tabs.has-adapter {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
@@ -3275,6 +3772,7 @@ a:focus-visible {
 .error-toast small,
 .dataset-switcher small,
 .dataset-search kbd,
+.executed-filter-row select,
 .validation-pill,
 .panel-heading small,
 .inspector-heading small,
@@ -3313,6 +3811,9 @@ a:focus-visible {
 .import-dialog small,
 .error-toast button,
 .tree-toolbar button,
+.channel-quality-menu summary,
+.quality-filter-list,
+.channel-quality-popover p,
 .map-control-stack .basemap-menu button,
 .map-spatial-error span,
 .map-legend > p,
@@ -3320,6 +3821,11 @@ a:focus-visible {
 .inspector-heading span,
 .property-list dd,
 .source-note,
+.adapter-status,
+.timelog-adapter-heading small,
+.timelog-adapter-select,
+.timelog-adapter-control p,
+.adapter-choice-note,
 .relationship-list strong,
 .binary-offset strong,
 .jump-source-button,

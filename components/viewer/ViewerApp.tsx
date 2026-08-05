@@ -20,8 +20,10 @@ import {
   downloadBlob,
   downloadText,
   gridChannelCsv,
+  timeLogChannelCsv,
 } from "@/lib/isoxml/export";
 import {
+  applyTimeLogAdapter as applyTimeLogAdapterInWorker,
   importIsoXmlFiles,
   loadSyntheticDemo,
   type ImportProgress,
@@ -36,6 +38,9 @@ import { BottomPanel } from "./BottomPanel";
 import { DatasetTree } from "./DatasetTree";
 import { Inspector } from "./Inspector";
 import { MapWorkspace } from "./MapWorkspace";
+import { TimeLogInspector } from "./TimeLogInspector";
+import { TimeLogAdapterWorkspace } from "./TimeLogAdapterControl";
+import { TimeLogMapWorkspace } from "./TimeLogMapWorkspace";
 import { currentDataset, useViewerStore } from "./store";
 import { TopBar } from "./TopBar";
 import { TransformPackageDialog } from "./TransformPackageDialog";
@@ -55,6 +60,12 @@ export function ViewerApp() {
     (state) => state.activeGridInstanceId,
   );
   const activeChannelId = useViewerStore((state) => state.activeChannelId);
+  const activeTimeLogInstanceId = useViewerStore(
+    (state) => state.activeTimeLogInstanceId,
+  );
+  const activeTimeLogChannelId = useViewerStore(
+    (state) => state.activeTimeLogChannelId,
+  );
   const leftCollapsed = useViewerStore((state) => state.leftCollapsed);
   const rightCollapsed = useViewerStore((state) => state.rightCollapsed);
   const bottomCollapsed = useViewerStore((state) => state.bottomCollapsed);
@@ -64,6 +75,10 @@ export function ViewerApp() {
   const setPanelCollapsed = useViewerStore((state) => state.setPanelCollapsed);
   const setPanelSize = useViewerStore((state) => state.setPanelSize);
   const setBottomTab = useViewerStore((state) => state.setBottomTab);
+  const setActiveTimeLog = useViewerStore((state) => state.setActiveTimeLog);
+  const setActiveTimeLogChannel = useViewerStore(
+    (state) => state.setActiveTimeLogChannel,
+  );
   const theme = useViewerStore((state) => state.theme);
   const toggleTheme = useViewerStore((state) => state.toggleTheme);
   const [search, setSearch] = useState("");
@@ -72,6 +87,7 @@ export function ViewerApp() {
   const [pendingZipFiles, setPendingZipFiles] = useState<File[]>();
   const [transformDialogOpen, setTransformDialogOpen] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [adapterBusyId, setAdapterBusyId] = useState<string>();
   const shellRef = useRef<HTMLDivElement>(null);
   const bootstrapStarted = useRef(false);
 
@@ -80,6 +96,12 @@ export function ViewerApp() {
   );
   const activeChannel = activeGrid?.channels.find(
     (channel) => channel.channelId === activeChannelId,
+  );
+  const activeTimeLog = (dataset?.timeLogs ?? []).find(
+    (timeLog) => timeLog.instanceId === activeTimeLogInstanceId,
+  );
+  const activeTimeLogChannel = activeTimeLog?.channels.find(
+    (channel) => channel.channelId === activeTimeLogChannelId,
   );
   const recentDatasets = recentDatasetIds.flatMap((id) => {
     const recentDataset = currentDataset(id);
@@ -94,6 +116,51 @@ export function ViewerApp() {
     },
     [setDataset, setImportError, setProgress],
   );
+
+  const selectTimeLogAdapter = async (
+    timeLogInstanceId: string,
+    adapterId?: string,
+  ) => {
+    if (!dataset || adapterBusyId) return;
+    setAdapterBusyId(timeLogInstanceId);
+    setImportError(undefined);
+    setProgress({
+      stage: "timelogs",
+      progress: 0.72,
+      detail: adapterId
+        ? "Applying selected time-log adapter"
+        : "Re-evaluating time-log adapters",
+    });
+    try {
+      const nextDataset = await applyTimeLogAdapterInWorker(
+        dataset,
+        timeLogInstanceId,
+        adapterId,
+      );
+      applyDataset(nextDataset, true);
+      const updatedTimeLog = nextDataset.timeLogs.find(
+        (timeLog) => timeLog.instanceId === timeLogInstanceId,
+      );
+      const firstChannel = updatedTimeLog?.channels[0];
+      if (updatedTimeLog && firstChannel) {
+        setActiveTimeLogChannel(
+          updatedTimeLog.instanceId,
+          firstChannel.channelId,
+        );
+      } else if (updatedTimeLog) {
+        setActiveTimeLog(updatedTimeLog.instanceId);
+      }
+    } catch (error) {
+      setProgress(undefined);
+      setImportError(
+        error instanceof Error
+          ? error.message
+          : "The time-log adapter could not be applied.",
+      );
+    } finally {
+      setAdapterBusyId(undefined);
+    }
+  };
 
   const runImport = async (files: File[], sourceLabel: string) => {
     try {
@@ -325,12 +392,22 @@ export function ViewerApp() {
   };
 
   const exportActive = () => {
-    if (!dataset || !activeGrid || !activeChannel) return;
-    downloadText(
-      gridChannelCsv(activeGrid, activeChannel),
-      `${activeGrid.id}-${activeChannel.ddiDisplay}-${activeChannel.productId ?? "channel"}.csv`,
-      "text/csv;charset=utf-8",
-    );
+    if (!dataset) return;
+    if (activeGrid && activeChannel) {
+      downloadText(
+        gridChannelCsv(activeGrid, activeChannel),
+        `${activeGrid.id}-${activeChannel.ddiDisplay}-${activeChannel.productId ?? "channel"}.csv`,
+        "text/csv;charset=utf-8",
+      );
+      return;
+    }
+    if (activeTimeLog && activeTimeLogChannel) {
+      downloadText(
+        timeLogChannelCsv(activeTimeLog, activeTimeLogChannel),
+        `${activeTimeLog.id}-${activeTimeLogChannel.ddiDisplay}-${activeTimeLogChannel.deviceElementId ?? "channel"}.csv`,
+        "text/csv;charset=utf-8",
+      );
+    }
   };
 
   const createVariant = async (plan: PackageTransformPlan) => {
@@ -400,7 +477,11 @@ export function ViewerApp() {
         onImportFiles={(files) => onFiles(files, "Selected ISOXML files")}
         onTransform={() => setTransformDialogOpen(true)}
         onExport={exportActive}
-        canExport={Boolean(dataset && activeGrid && activeChannel)}
+        canExport={Boolean(
+          dataset &&
+          ((activeGrid && activeChannel) ||
+            (activeTimeLog && activeTimeLogChannel)),
+        )}
         onTheme={toggleTheme}
         onValidation={() => setBottomTab("issues")}
         theme={theme}
@@ -408,6 +489,7 @@ export function ViewerApp() {
       <div className="workspace-body">
         {!leftCollapsed && dataset && (
           <DatasetTree
+            key={dataset.id}
             dataset={dataset}
             search={search}
             onSearchChange={setSearch}
@@ -432,10 +514,35 @@ export function ViewerApp() {
               grid={activeGrid}
               channel={activeChannel}
             />
+          ) : dataset &&
+            activeTimeLog &&
+            activeTimeLog.adapterSelection.mode === "unresolved" ? (
+            <TimeLogAdapterWorkspace
+              timeLog={activeTimeLog}
+              onSelectAdapter={(adapterId) =>
+                void selectTimeLogAdapter(activeTimeLog.instanceId, adapterId)
+              }
+              busy={adapterBusyId === activeTimeLog.instanceId}
+            />
+          ) : dataset && activeTimeLog && activeTimeLogChannel ? (
+            <TimeLogMapWorkspace
+              key={activeTimeLog.instanceId}
+              dataset={dataset}
+              timeLog={activeTimeLog}
+              channel={activeTimeLogChannel}
+            />
+          ) : dataset && activeTimeLog ? (
+            <TimeLogAdapterWorkspace
+              timeLog={activeTimeLog}
+              onSelectAdapter={(adapterId) =>
+                void selectTimeLogAdapter(activeTimeLog.instanceId, adapterId)
+              }
+              busy={adapterBusyId === activeTimeLog.instanceId}
+            />
           ) : dataset ? (
             <div className="workspace-loading workspace-empty">
               <DatabaseZap size={30} />
-              <strong>No decoded grid channel is available</strong>
+              <strong>No decoded spatial channel is available</strong>
               <span>
                 The package is still preserved. Review its issues, files, and
                 raw XML for unsupported or incomplete data.
@@ -478,6 +585,8 @@ export function ViewerApp() {
               dataset={dataset}
               grid={activeGrid}
               channel={activeChannel}
+              timeLog={activeTimeLog}
+              timeLogChannel={activeTimeLogChannel}
             />
           )}
           {bottomCollapsed && (
@@ -510,6 +619,20 @@ export function ViewerApp() {
             channel={activeChannel}
           />
         )}
+        {!rightCollapsed &&
+          dataset &&
+          activeTimeLog &&
+          activeTimeLogChannel && (
+            <TimeLogInspector
+              dataset={dataset}
+              timeLog={activeTimeLog}
+              channel={activeTimeLogChannel}
+              onSelectAdapter={(adapterId) =>
+                void selectTimeLogAdapter(activeTimeLog.instanceId, adapterId)
+              }
+              adapterBusy={adapterBusyId === activeTimeLog.instanceId}
+            />
+          )}
       </div>
 
       {leftCollapsed && (

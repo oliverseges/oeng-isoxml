@@ -4,6 +4,7 @@ import type {
   WorkerInputFile,
   WorkerRequest,
   WorkerResponse,
+  TimeLogAdapterWorkerRequest,
 } from "./types";
 import {
   MAX_INPUT_FILE_BYTES,
@@ -121,4 +122,49 @@ export async function loadSyntheticDemo(
     }),
   ];
   return importIsoXmlFiles(files, "Synthetic three-channel demo", onProgress);
+}
+
+export function applyTimeLogAdapter(
+  dataset: IsoXmlDataset,
+  timeLogInstanceId: string,
+  adapterId?: string,
+): Promise<IsoXmlDataset> {
+  const worker = new Worker(
+    new URL("./timelog-adapter.worker.ts", import.meta.url),
+    {
+      type: "module",
+      name: "oeng-isoxml-timelog-adapter",
+    },
+  );
+  const requestId = crypto.randomUUID();
+  return new Promise((resolve, reject) => {
+    worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+      const message = event.data;
+      if (message.requestId !== requestId) return;
+      if (message.type === "complete") {
+        worker.terminate();
+        resolve(message.dataset);
+      }
+      if (message.type === "error") {
+        worker.terminate();
+        reject(new Error(message.message));
+      }
+    };
+    worker.onerror = (event) => {
+      worker.terminate();
+      reject(
+        new Error(
+          event.message || "The time-log adapter worker stopped unexpectedly.",
+        ),
+      );
+    };
+    const request: TimeLogAdapterWorkerRequest = {
+      type: "redecode-timelog",
+      requestId,
+      dataset,
+      timeLogInstanceId,
+      adapterId,
+    };
+    worker.postMessage(request);
+  });
 }

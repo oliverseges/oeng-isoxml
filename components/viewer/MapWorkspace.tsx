@@ -9,6 +9,7 @@ import {
   Crosshair,
   Download,
   EyeOff,
+  Filter,
   Layers,
   LocateFixed,
   MapPin,
@@ -16,7 +17,6 @@ import {
   Plus,
   ScanLine,
   SlidersHorizontal,
-  TrendingDown,
 } from "lucide-react";
 import { decodeValue } from "@/lib/isoxml/value-decoder";
 import {
@@ -45,6 +45,11 @@ import type {
   SpatialBoundary,
 } from "@/lib/isoxml/types";
 import { useViewerStore } from "./store";
+import {
+  BASEMAP_ZOOM_OPTIONS,
+  MAP_MAX_ZOOM,
+  MAP_MIN_ZOOM,
+} from "./map-options";
 
 const colorStops = [
   "#233f52",
@@ -784,8 +789,8 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
       const map = leaflet.map(containerRef.current, {
         zoomControl: false,
         attributionControl: true,
-        minZoom: 3,
-        maxZoom: 21,
+        minZoom: MAP_MIN_ZOOM,
+        maxZoom: MAP_MAX_ZOOM,
         zoomSnap: ZOOM_STEP,
         zoomDelta: ZOOM_STEP,
         zoomAnimation: false,
@@ -814,7 +819,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
           .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
             attribution: "© OpenStreetMap contributors",
             crossOrigin: true,
-            maxZoom: 19,
+            ...BASEMAP_ZOOM_OPTIONS,
           })
           .addTo(map);
         tileLayerRef.current.bringToBack();
@@ -826,7 +831,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
               attribution:
                 "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
               crossOrigin: true,
-              maxZoom: 19,
+              ...BASEMAP_ZOOM_OPTIONS,
             },
           )
           .addTo(map);
@@ -963,7 +968,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
         .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
           attribution: "© OpenStreetMap contributors",
           crossOrigin: true,
-          maxZoom: 19,
+          ...BASEMAP_ZOOM_OPTIONS,
         })
         .addTo(map);
       tileLayerRef.current.bringToBack();
@@ -975,7 +980,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
             attribution:
               "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
             crossOrigin: true,
-            maxZoom: 19,
+            ...BASEMAP_ZOOM_OPTIONS,
           },
         )
         .addTo(map);
@@ -1129,6 +1134,8 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
           type="button"
           onClick={() => mapRef.current?.zoomIn(ZOOM_STEP, { animate: false })}
           aria-label="Zoom in"
+          title="Zoom in"
+          data-tooltip="Zoom in"
         >
           <Plus size={16} />
         </button>
@@ -1136,11 +1143,19 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
           type="button"
           onClick={() => mapRef.current?.zoomOut(ZOOM_STEP, { animate: false })}
           aria-label="Zoom out"
+          title="Zoom out"
+          data-tooltip="Zoom out"
         >
           <Minus size={16} />
         </button>
         <span />
-        <button type="button" onClick={fitGrid} aria-label="Fit active grid">
+        <button
+          type="button"
+          onClick={fitGrid}
+          aria-label="Fit active grid to the map"
+          title="Fit active grid to the map"
+          data-tooltip="Fit active grid to the map"
+        >
           <Crosshair size={16} />
         </button>
         <div className="map-filter-control" ref={displayFilterControlRef}>
@@ -1149,7 +1164,8 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
             className={activeDisplayFilterCount ? "active" : ""}
             aria-label={`Configure map display filters${activeDisplayFilterCount ? `: ${activeDisplayFilterCount} active` : ""}`}
             aria-expanded={displayFilterMenuOpen}
-            title="Map display filters"
+            title={`Map display filters${activeDisplayFilterCount ? ` (${activeDisplayFilterCount} active)` : ""}`}
+            data-tooltip={`Map display filters${activeDisplayFilterCount ? ` (${activeDisplayFilterCount} active)` : ""}`}
             onClick={() => {
               setDisplayFilterMenuOpen((open) => !open);
               setBaseLayerMenuOpen(false);
@@ -1201,7 +1217,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
                 className={hideOutliers ? "active" : ""}
                 onClick={() => setHideOutliers(!hideOutliers)}
               >
-                <TrendingDown size={14} aria-hidden="true" />
+                <Filter size={14} aria-hidden="true" />
                 <span>
                   <strong>Hide outliers</strong>
                   <small title="Extreme values beyond 3× IQR, with a minimum 50% typical-value guard">
@@ -1225,7 +1241,8 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
             aria-label="Choose background map"
             aria-expanded={baseLayerMenuOpen}
             className={baseLayer !== "none" ? "active" : ""}
-            title="Background maps load tiles over the network"
+            title="Choose background map (tiles may load over the network)"
+            data-tooltip="Choose background map"
           >
             <Layers size={16} />
           </button>
