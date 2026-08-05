@@ -1423,6 +1423,7 @@ a:focus-visible {
 .bottom-tabs {
   display: flex;
   overflow-x: auto;
+  overflow-y: hidden;
   scrollbar-color: var(--line) transparent;
   scrollbar-width: thin;
 }
