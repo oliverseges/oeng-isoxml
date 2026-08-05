@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildMapGridRaster,
+  timeLogPointRenderStyle,
   webMercatorWorldPixel,
 } from "@/components/viewer/map-rendering";
 import type { DecodedGrid } from "@/lib/isoxml/types";
@@ -19,6 +20,19 @@ describe("map rendering primitives", () => {
     expect(webMercatorWorldPixel(0, 0)).toEqual({ x: 128, y: 128 });
     expect(webMercatorWorldPixel(0, 180).x).toBe(256);
     expect(webMercatorWorldPixel(85.0511287798, 0).y).toBeCloseTo(0, 7);
+  });
+
+  it("removes point borders at overview zoom and restores them gradually", () => {
+    expect(timeLogPointRenderStyle(15)).toMatchObject({
+      radius: 3,
+      fillAlpha: 0.96,
+      borderAlpha: 0,
+    });
+    expect(timeLogPointRenderStyle(17).borderAlpha).toBeCloseTo(0.21);
+    expect(timeLogPointRenderStyle(19)).toMatchObject({
+      radius: 6,
+      borderAlpha: 0.42,
+    });
   });
 
   it("rasterizes southwest-origin grid rows in north-up image order", () => {

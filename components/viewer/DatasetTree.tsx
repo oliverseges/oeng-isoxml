@@ -47,6 +47,9 @@ import {
   executedChannelTreeLabel,
   isTreeChannelActive,
   isTreeNodeInDataScope,
+  toggleCollapsedTreeNodeId,
+  treeContainerNeedsActivation,
+  treeNodeTogglesChildrenOnClick,
   type TreeDataScope,
 } from "./tree-selection";
 
@@ -145,6 +148,9 @@ export function DatasetTree({
   const scrollRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const activeChannelId = useViewerStore((state) => state.activeChannelId);
+  const activeGridInstanceId = useViewerStore(
+    (state) => state.activeGridInstanceId,
+  );
   const activeTimeLogChannelId = useViewerStore(
     (state) => state.activeTimeLogChannelId,
   );
@@ -836,12 +842,23 @@ export function DatasetTree({
   });
 
   const handleNode = (node: TreeNode) => {
+    if (treeNodeTogglesChildrenOnClick(node)) {
+      setCollapsed((current) => toggleCollapsedTreeNodeId(current, node.id));
+    }
     if (node.timeLogChannelId && node.timeLogInstanceId) {
       setActiveTimeLogChannel(node.timeLogInstanceId, node.timeLogChannelId);
       requestMapFit();
       return;
     }
     if (node.kind === "timelog" && node.timeLogInstanceId) {
+      if (
+        !treeContainerNeedsActivation(
+          node.timeLogInstanceId,
+          activeTimeLogInstanceId,
+        )
+      ) {
+        return;
+      }
       const timeLog = (dataset.timeLogs ?? []).find(
         (candidate) => candidate.instanceId === node.timeLogInstanceId,
       );
@@ -860,6 +877,11 @@ export function DatasetTree({
       return;
     }
     if (node.kind === "grid" && node.gridInstanceId) {
+      if (
+        !treeContainerNeedsActivation(node.gridInstanceId, activeGridInstanceId)
+      ) {
+        return;
+      }
       const grid = dataset.grids.find(
         (candidate) => candidate.instanceId === node.gridInstanceId,
       );
@@ -908,14 +930,6 @@ export function DatasetTree({
       setInspectorTab("relationships");
       useViewerStore.getState().setPanelCollapsed("right", false);
       return;
-    }
-    if (node.hasChildren) {
-      setCollapsed((current) => {
-        const next = new Set(current);
-        if (next.has(node.id)) next.delete(node.id);
-        else next.add(node.id);
-        return next;
-      });
     }
   };
 

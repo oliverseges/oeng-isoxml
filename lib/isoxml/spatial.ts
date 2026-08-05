@@ -1,4 +1,4 @@
-import type { DecodedGrid } from "./types";
+import type { DecodedGrid, SpatialBoundary } from "./types";
 
 export interface GeographicCellBounds {
   north: number;
@@ -21,6 +21,31 @@ export interface GridCellRange {
   lastRow: number;
   firstColumn: number;
   lastColumn: number;
+}
+
+export function pointIsInsideBoundary(
+  latitude: number,
+  longitude: number,
+  boundary: SpatialBoundary,
+): boolean {
+  let inside = false;
+  const points = boundary.coordinates;
+  for (
+    let index = 0, previous = points.length - 1;
+    index < points.length;
+    previous = index, index += 1
+  ) {
+    const [currentLatitude, currentLongitude] = points[index];
+    const [previousLatitude, previousLongitude] = points[previous];
+    const crossesLatitude =
+      currentLatitude > latitude !== previousLatitude > latitude;
+    const crossingLongitude =
+      ((previousLongitude - currentLongitude) * (latitude - currentLatitude)) /
+        (previousLatitude - currentLatitude) +
+      currentLongitude;
+    if (crossesLatitude && longitude < crossingLongitude) inside = !inside;
+  }
+  return inside;
 }
 
 export function gridStepDegrees(grid: DecodedGrid): {

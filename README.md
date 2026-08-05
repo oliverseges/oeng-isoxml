@@ -22,12 +22,12 @@ This project does **not** claim ISO 11783 conformance. The bundled public DDI me
 - Executed tree rows show the DDI code and dictionary name; device context remains available in the row description.
 - Product, DET, PDV, VPN and binary-offset inspection.
 - All 765 public DDI entries from ISOBUS Data Dictionary version 2026050501, including definitions, units, bit resolutions, ranges, device classes and links to the correct official record.
-- Manifest hashes, severity-sorted validation details, multi-file raw source, active planned/executed-channel CSV export and planned-map PNG export.
+- Manifest hashes, severity-sorted validation details, multi-file raw source, active planned/executed-channel CSV export and planned/executed-map PNG export.
 - Non-destructive package variants: remove tasks, grids or Type 2 PDVs; add a
   DET to an existing DVC; remap DET references; or merge compatible single-grid
   tasks. Generated ZIPs are downloaded, re-imported, selected for preview and
   kept beside the source.
-- Dark/light appearance, resizable/collapsible panels and keyboard focus.
+- Dark/light appearance, resizable/collapsible panels, container-aware map redraws and keyboard focus.
 
 See [support matrix](docs/SUPPORT_MATRIX.md) and [known limitations](docs/KNOWN_LIMITATIONS.md) before using the viewer for production decisions.
 

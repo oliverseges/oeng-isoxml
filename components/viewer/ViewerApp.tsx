@@ -496,7 +496,7 @@ export function ViewerApp() {
           />
         )}
         <div
-          className="resize-divider vertical"
+          className="resize-divider vertical left-divider"
           onPointerDown={(event) => startResize("left", event)}
           onKeyDown={(event) => resizeWithKeyboard("left", event)}
           role="separator"
@@ -507,7 +507,9 @@ export function ViewerApp() {
           aria-valuenow={leftWidth}
           tabIndex={0}
         />
-        <div className="center-stack">
+        <div
+          className={`center-stack${bottomCollapsed ? " bottom-collapsed" : ""}`}
+        >
           {dataset && activeGrid && activeChannel ? (
             <MapWorkspace
               dataset={dataset}
@@ -594,6 +596,7 @@ export function ViewerApp() {
               className="collapsed-bottom-toggle"
               type="button"
               onClick={() => setPanelCollapsed("bottom", false)}
+              aria-label="Open data panel"
             >
               <ChevronLeft size={13} />
               OPEN DATA PANEL
@@ -601,7 +604,7 @@ export function ViewerApp() {
           )}
         </div>
         <div
-          className="resize-divider vertical"
+          className="resize-divider vertical right-divider"
           onPointerDown={(event) => startResize("right", event)}
           onKeyDown={(event) => resizeWithKeyboard("right", event)}
           role="separator"

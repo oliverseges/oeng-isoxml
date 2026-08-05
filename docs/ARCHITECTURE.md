@@ -17,26 +17,28 @@ Heavy byte arrays live in a repository, not the reactive UI store. Zustand only 
 
 ## Module boundaries
 
-| File/module                             | Responsibility                                                  |
-| --------------------------------------- | --------------------------------------------------------------- |
-| `lib/isoxml/file-loader.ts`             | Multiple files, ZIP safety, path normalization and lookup       |
-| `lib/isoxml/xml-parser.ts`              | Secure ordered element/attribute parsing                        |
-| `lib/isoxml/object-model.ts`            | Worker input schemas, IDs, flattening and structured issues     |
-| `lib/isoxml/reference-resolver.ts`      | ID buckets, duplicate detection and typed reference resolution  |
-| `lib/isoxml/grid-decoder.ts`            | Columnar compact Type 2 decoding with explicit layout evidence  |
-| `lib/isoxml/timelog-adapters.ts`        | Scored adapter registry, selection and non-destructive override |
-| `lib/isoxml/timelog-decoder.ts`         | Type 1 PTN/DLV binary decoding into sparse typed arrays         |
-| `lib/isoxml/operation-groups.ts`        | Evidence-based executed-channel navigation presets              |
-| `lib/isoxml/timelog-channel-quality.ts` | Value/presence/location usefulness summaries                    |
-| `lib/isoxml/ddi-*.ts`                   | Versioned public DDI snapshot and lookup boundary               |
-| `lib/isoxml/value-decoder.ts`           | Raw-preserving decimal-safe presentation                        |
-| `lib/isoxml/pipeline.ts`                | Staged validation, domain summaries and manifest construction   |
-| `lib/isoxml/spatial.ts`                 | Bounds, coordinates, hit testing and viewport cell ranges       |
-| `components/viewer/MapWorkspace.tsx`    | Leaflet lifecycle, canvas overlay, filters and map-image export |
-| `components/viewer/map-rendering.ts`    | Grid rasterization and allocation-free point projection         |
-| `lib/isoxml/export.ts`                  | CSV and GeoJSON serialization helpers                           |
-| `lib/isoxml/package-transform.ts`       | Guarded cleanup/remap and compatible task-merge ZIP variants    |
-| `components/viewer/*`                   | Workspace, virtualized tree/table, inspector, dialogs and state |
+| File/module                                 | Responsibility                                                  |
+| ------------------------------------------- | --------------------------------------------------------------- |
+| `lib/isoxml/file-loader.ts`                 | Multiple files, ZIP safety, path normalization and lookup       |
+| `lib/isoxml/xml-parser.ts`                  | Secure ordered element/attribute parsing                        |
+| `lib/isoxml/object-model.ts`                | Worker input schemas, IDs, flattening and structured issues     |
+| `lib/isoxml/reference-resolver.ts`          | ID buckets, duplicate detection and typed reference resolution  |
+| `lib/isoxml/grid-decoder.ts`                | Columnar compact Type 2 decoding with explicit layout evidence  |
+| `lib/isoxml/timelog-adapters.ts`            | Scored adapter registry, selection and non-destructive override |
+| `lib/isoxml/timelog-decoder.ts`             | Type 1 PTN/DLV binary decoding into sparse typed arrays         |
+| `lib/isoxml/operation-groups.ts`            | Evidence-based executed-channel navigation presets              |
+| `lib/isoxml/timelog-channel-quality.ts`     | Value/presence/location usefulness summaries                    |
+| `lib/isoxml/ddi-*.ts`                       | Versioned public DDI snapshot and lookup boundary               |
+| `lib/isoxml/value-decoder.ts`               | Raw-preserving decimal-safe presentation                        |
+| `lib/isoxml/pipeline.ts`                    | Staged validation, domain summaries and manifest construction   |
+| `lib/isoxml/spatial.ts`                     | Bounds, coordinates, hit testing and viewport cell ranges       |
+| `components/viewer/MapWorkspace.tsx`        | Planned Leaflet/canvas lifecycle, filters and map-image export  |
+| `components/viewer/TimeLogMapWorkspace.tsx` | Executed Leaflet/canvas lifecycle, points and map-image export  |
+| `components/viewer/ViewerApp.tsx`           | Stable panel-grid placement and persisted workspace layout      |
+| `components/viewer/map-rendering.ts`        | Grid rasterization and allocation-free point projection         |
+| `lib/isoxml/export.ts`                      | CSV and GeoJSON serialization helpers                           |
+| `lib/isoxml/package-transform.ts`           | Guarded cleanup/remap and compatible task-merge ZIP variants    |
+| `components/viewer/*`                       | Workspace, virtualized tree/table, inspector, dialogs and state |
 
 ## Import flow
 
@@ -75,7 +77,9 @@ does not synthesize a new DVC/DOR/DPD/DPT graph or rewrite executed data.
 
 ## Initial vertical slice
 
-The runnable slice covers local files and ZIPs, exact raw XML plus an ordered object index, task/product/treatment-zone/device/value-presentation relationships, Type 2 grids with independently selectable PDVs, Type 1 time logs with sparse DLV channels, decimal-safe scaling, Leaflet canvas rendering, selection inspection, file manifest, issue list and CSV/planned-map-image export. A GeoJSON serializer exists as a library adapter but is not exposed in the current UI.
+The runnable slice covers local files and ZIPs, exact raw XML plus an ordered object index, task/product/treatment-zone/device/value-presentation relationships, Type 2 grids with independently selectable PDVs, Type 1 time logs with sparse DLV channels, decimal-safe scaling, Leaflet canvas rendering, selection inspection, file manifest, issue list and planned/executed CSV and map-image export. A GeoJSON serializer exists as a library adapter but is not exposed in the current UI.
+
+Planned and executed map containers are observed directly for size changes. Panel collapse, panel expansion, pointer resizing and responsive layout changes invalidate the Leaflet viewport and repaint the canvas without changing the active layer. Explicit CSS grid columns keep the map in the centre track even when either side panel is unmounted.
 
 Type 1 grid decoding, non-Type-1 time-log layouts, schema validation and full interactive device graphs remain expansion points. The UI labels these as partial or unavailable instead of inferring data.
 

@@ -4,6 +4,9 @@ import {
   executedChannelTreeLabel,
   isTreeChannelActive,
   isTreeNodeInDataScope,
+  toggleCollapsedTreeNodeId,
+  treeContainerNeedsActivation,
+  treeNodeTogglesChildrenOnClick,
 } from "@/components/viewer/tree-selection";
 
 describe("dataset-tree channel selection", () => {
@@ -27,6 +30,28 @@ describe("dataset-tree channel selection", () => {
         "executed-channel",
       ),
     ).toBe(false);
+  });
+
+  it("toggles selectable time-log and grid branches when their row is clicked", () => {
+    expect(
+      treeNodeTogglesChildrenOnClick({
+        hasChildren: true,
+      }),
+    ).toBe(true);
+    expect(treeNodeTogglesChildrenOnClick({ hasChildren: false })).toBe(false);
+
+    const collapsed = toggleCollapsedTreeNodeId(new Set(), "timelog:TLG00008");
+    expect(collapsed).toEqual(new Set(["timelog:TLG00008"]));
+    expect(toggleCollapsedTreeNodeId(collapsed, "timelog:TLG00008")).toEqual(
+      new Set(),
+    );
+  });
+
+  it("does not reactivate an already active container while collapsing it", () => {
+    expect(treeContainerNeedsActivation("TLG00008#1", "TLG00008#1")).toBe(
+      false,
+    );
+    expect(treeContainerNeedsActivation("TLG00008#1", "TLG00007#1")).toBe(true);
   });
 
   it("shows the DDI dictionary name in executed channel rows", () => {

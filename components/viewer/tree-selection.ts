@@ -11,6 +11,31 @@ export function isTreeChannelActive(
   );
 }
 
+export function treeNodeTogglesChildrenOnClick(node: {
+  hasChildren?: boolean;
+}): boolean {
+  return Boolean(node.hasChildren);
+}
+
+export function toggleCollapsedTreeNodeId(
+  collapsedIds: ReadonlySet<string>,
+  nodeId: string,
+): Set<string> {
+  const next = new Set(collapsedIds);
+  if (next.has(nodeId)) next.delete(nodeId);
+  else next.add(nodeId);
+  return next;
+}
+
+export function treeContainerNeedsActivation(
+  containerInstanceId: string | undefined,
+  activeContainerInstanceId: string | undefined,
+): boolean {
+  return Boolean(
+    containerInstanceId && containerInstanceId !== activeContainerInstanceId,
+  );
+}
+
 export function executedChannelTreeLabel(channel: {
   ddiDisplay: string;
   ddiName?: string;

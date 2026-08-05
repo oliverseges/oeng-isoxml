@@ -7,7 +7,6 @@ import {
   Check,
   Crop,
   Crosshair,
-  Download,
   EyeOff,
   Filter,
   Layers,
@@ -15,6 +14,7 @@ import {
   MapPin,
   Minus,
   Plus,
+  Scan,
   ScanLine,
   SlidersHorizontal,
 } from "lucide-react";
@@ -28,6 +28,7 @@ import {
   gridCellIndexAt,
   gridCellRangeForBounds,
   isSpatialGridValid,
+  pointIsInsideBoundary,
 } from "@/lib/isoxml/spatial";
 import { downloadBlob } from "@/lib/isoxml/export";
 import { copyTextToClipboard } from "@/lib/client/clipboard";
@@ -46,6 +47,7 @@ import type {
 } from "@/lib/isoxml/types";
 import { useViewerStore } from "./store";
 import { buildMapGridRaster, type MapGridRaster } from "./map-rendering";
+import { drawMapScreenshotTooltip } from "./map-screenshot";
 import {
   BASEMAP_ZOOM_OPTIONS,
   MAP_MAX_ZOOM,
@@ -164,31 +166,6 @@ function traceBoundaryPath(
   context.closePath();
 }
 
-function pointIsInsideBoundary(
-  latitude: number,
-  longitude: number,
-  boundary: SpatialBoundary,
-): boolean {
-  let inside = false;
-  const points = boundary.coordinates;
-  for (
-    let index = 0, previous = points.length - 1;
-    index < points.length;
-    previous = index, index += 1
-  ) {
-    const [currentLatitude, currentLongitude] = points[index];
-    const [previousLatitude, previousLongitude] = points[previous];
-    const crossesLatitude =
-      currentLatitude > latitude !== previousLatitude > latitude;
-    const crossingLongitude =
-      ((previousLongitude - currentLongitude) * (latitude - currentLatitude)) /
-        (previousLatitude - currentLatitude) +
-      currentLongitude;
-    if (crossesLatitude && longitude < crossingLongitude) inside = !inside;
-  }
-  return inside;
-}
-
 function fittedCanvasText(
   context: CanvasRenderingContext2D,
   value: string,
@@ -209,22 +186,18 @@ function drawExportLegend(
   context: CanvasRenderingContext2D,
   width: number,
   channel: GridChannel,
-  grid: DecodedGrid,
   min: number,
   max: number,
-  visibleCellCount: number,
-  filteredCellCount: number,
-  zeroCount: number,
-  noDataCount: number,
   classColors: readonly string[],
-  scaleLabel: string,
   averageDose: string | undefined,
   totalDose: string | undefined,
 ): void {
+  const rows = [
+    ...(averageDose ? [["Average dose", averageDose]] : []),
+    ...(totalDose ? [["Total dose", totalDose]] : []),
+  ];
   const panelWidth = Math.min(240, width - 28);
-  const doseRowCount =
-    Number(Boolean(averageDose)) + Number(Boolean(totalDose));
-  const panelHeight = 205 + doseRowCount * 19;
+  const panelHeight = 124 + rows.length * 19;
   const x = Math.max(14, width - panelWidth - 14);
   const y = 14;
   const innerX = x + 13;
@@ -311,14 +284,6 @@ function drawExportLegend(
   context.lineTo(innerX + innerWidth, ruleY);
   context.stroke();
 
-  const rows = [
-    ["Scale", scaleLabel],
-    ...(averageDose ? [["Average dose", averageDose]] : []),
-    ...(totalDose ? [["Total dose", totalDose]] : []),
-    ["Visible / filtered", `${visibleCellCount} / ${filteredCellCount}`],
-    ["Zero / no-data", `${zeroCount} / ${noDataCount}`],
-    ["Source", grid.filename],
-  ];
   context.font = "10px Inter, Arial, sans-serif";
   rows.forEach(([label, value], index) => {
     const rowY = y + 122 + index * 19;
@@ -863,7 +828,9 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
     if (!containerRef.current) return;
     let disposed = false;
     let redrawFrame: number | undefined;
+    let resizeFrame: number | undefined;
     let hoverFrame: number | undefined;
+    let resizeObserver: ResizeObserver | undefined;
     void import("leaflet").then((leaflet) => {
       if (disposed || !containerRef.current) return;
       leafletRef.current = leaflet;
@@ -949,6 +916,16 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
           );
         });
       };
+      resizeObserver = new ResizeObserver(() => {
+        if (resizeFrame !== undefined) return;
+        resizeFrame = requestAnimationFrame(() => {
+          resizeFrame = undefined;
+          if (disposed) return;
+          map.invalidateSize({ animate: false, pan: false });
+          redraw();
+        });
+      });
+      resizeObserver.observe(containerRef.current);
       let pendingHover:
         | { latitude: number; longitude: number; x: number; y: number }
         | undefined;
@@ -1053,7 +1030,9 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
     return () => {
       disposed = true;
       if (redrawFrame !== undefined) cancelAnimationFrame(redrawFrame);
+      if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame);
       if (hoverFrame !== undefined) cancelAnimationFrame(hoverFrame);
+      resizeObserver?.disconnect();
       mapReadyRef.current = false;
       tileLayerRef.current?.remove();
       tileLayerRef.current = undefined;
@@ -1191,23 +1170,62 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
         );
       });
 
-      paintDataLayer(context, map, false);
+      paintDataLayer(context, map, true);
       drawExportLegend(
         context,
         size.x,
         channel,
-        grid,
         min,
         max,
-        visibleCellCount,
-        filteredCellCount,
-        zeroCount,
-        noDataCount,
         classColors,
-        scaleLabel,
         averageDose,
         totalDose,
       );
+
+      if (
+        selectedCellIndex !== undefined &&
+        !legendFilteredCellMask[selectedCellIndex]
+      ) {
+        const row = Math.floor(selectedCellIndex / grid.columns);
+        const column = selectedCellIndex % grid.columns;
+        const center = geographicCellCenter(grid, row, column);
+        const rawValue = grid.rawValues[channelIndex]?.[selectedCellIndex];
+        if (center && rawValue !== undefined) {
+          const anchor = map.latLngToContainerPoint([
+            center.latitude,
+            center.longitude,
+          ]);
+          if (
+            anchor.x >= 0 &&
+            anchor.y >= 0 &&
+            anchor.x <= size.x &&
+            anchor.y <= size.y
+          ) {
+            const selectedValue = decodeValue(rawValue, channel.presentation);
+            drawMapScreenshotTooltip(context, size.x, size.y, {
+              anchor,
+              headerLabel: `R${row + 1} · C${column + 1}`,
+              headerValue: `#${selectedCellIndex}`,
+              formattedValue: selectedValue.formattedValue,
+              unit: channel.unit,
+              rows: [
+                { label: "Raw", value: String(selectedValue.rawValue) },
+                {
+                  label: "Layout",
+                  value:
+                    grid.gridType === 2
+                      ? "Direct"
+                      : `Zone ${grid.treatmentZoneCodes[selectedCellIndex]}`,
+                },
+                {
+                  label: "PDV",
+                  value: `${channel.pdvIndex + 1} / ${grid.channels.length}`,
+                },
+              ],
+            });
+          }
+        }
+      }
 
       if (baseLayer !== "none") {
         const attributionLines =
@@ -1467,9 +1485,11 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
         <button
           type="button"
           onClick={() => void exportMap()}
-          aria-label="Export map canvas"
+          aria-label="Export map screenshot"
+          title="Export map screenshot"
+          data-tooltip="Export map screenshot"
         >
-          <Download size={16} />
+          <Scan size={16} />
         </button>
       </div>
 

@@ -14,6 +14,23 @@ export interface MapGridRaster {
   pixels: Uint8ClampedArray;
 }
 
+export interface TimeLogPointRenderStyle {
+  radius: number;
+  fillAlpha: number;
+  borderAlpha: number;
+  borderWidth: number;
+}
+
+export function timeLogPointRenderStyle(zoom: number): TimeLogPointRenderStyle {
+  const borderVisibility = Math.max(0, Math.min(1, (zoom - 16) / 2));
+  return {
+    radius: Math.max(3, Math.min(6, zoom - 12)),
+    fillAlpha: 0.96,
+    borderAlpha: borderVisibility * 0.42,
+    borderWidth: 0.65,
+  };
+}
+
 function colorComponents(color: string): [number, number, number] {
   const hex = color.match(/^#([0-9a-f]{6})$/i)?.[1];
   if (hex) {
