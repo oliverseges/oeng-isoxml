@@ -43,6 +43,7 @@ import {
 import type { IsoXmlDataset, IsoXmlObject } from "@/lib/isoxml/types";
 import { useViewerStore } from "./store";
 import {
+  emptyExecutedContainerIds,
   executedChannelTreeLabel,
   isTreeChannelActive,
   isTreeNodeInDataScope,
@@ -677,29 +678,39 @@ export function DatasetTree({
   const nodes = useMemo(() => {
     const byId = new Map(allNodes.map((node) => [node.id, node]));
     const query = search.trim().toLowerCase();
+    const visibleExecutedChannelNodeIds = new Set(
+      allNodes.flatMap((node) => {
+        if (!node.timeLogChannelId) return [];
+        if (
+          node.qualityMetrics &&
+          !passesExecutedChannelQualityFilters(
+            node.qualityMetrics,
+            qualityFilters,
+          )
+        ) {
+          return [];
+        }
+        if (
+          operationFilter !== "all" &&
+          !node.operationGroupIds?.includes(operationFilter)
+        ) {
+          return [];
+        }
+        if (ddiFilter !== "all" && node.ddiDisplay !== ddiFilter) return [];
+        return [node.id];
+      }),
+    );
+    const emptyExecutedContainers = emptyExecutedContainerIds(
+      allNodes,
+      visibleExecutedChannelNodeIds,
+    );
     const directMatches = new Set(
       allNodes
         .filter((node) => {
           if (!isTreeNodeInDataScope(node.dataScope, dataScope)) return false;
+          if (emptyExecutedContainers.has(node.id)) return false;
           if (node.timeLogChannelId) {
-            if (
-              node.qualityMetrics &&
-              !passesExecutedChannelQualityFilters(
-                node.qualityMetrics,
-                qualityFilters,
-              )
-            ) {
-              return false;
-            }
-            if (
-              operationFilter !== "all" &&
-              !node.operationGroupIds?.includes(operationFilter)
-            ) {
-              return false;
-            }
-            if (ddiFilter !== "all" && node.ddiDisplay !== ddiFilter) {
-              return false;
-            }
+            if (!visibleExecutedChannelNodeIds.has(node.id)) return false;
           }
           if (
             filterMode === "issues" &&

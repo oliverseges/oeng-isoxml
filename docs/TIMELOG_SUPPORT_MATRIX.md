@@ -43,6 +43,10 @@ Executed channel rows show both the hexadecimal DDI and its dictionary name. Map
 
 The navigator scope selector can isolate planned branches, executed branches, or show both. It composes with search, Issues and Spatial filters; choosing one scope also activates the first available channel from that scope when the current selection belongs elsewhere.
 
+DDI, operation and quality filters prune decoded time-log branches when none of their channels remain visible, including the now-empty executed-data section. Undecoded logs remain visible because selecting the log is required to inspect or choose its adapter.
+
 Moving over an executed point shows the same record card used for a clicked selection, including its displayed value, unit, timestamp and raw integer. Hover temporarily takes precedence over a clicked record; moving away restores the persistent clicked card. Screen-space hit buckets keep pointer lookup bounded to nearby rendered points rather than scanning the complete time log for every pointer event.
+
+Selecting an executed point shows that record's GPS coordinate and uses only the point-selection ring. Planned and executed maps share the same one-shot pin control for marking empty map space; selecting a data feature clears the standalone pin, so a pin is never drawn on top of a selected cell or point.
 
 Large point layers are projected once into base Web Mercator coordinates. Each frame converts them with direct arithmetic, rejects off-screen points before path creation, keeps one representative for overlapping screen-density buckets, and batches the remaining points by color. Canvas storage is reused and both redraw and hover work are coalesced to animation frames. Zooming in naturally exposes denser individual records while overview maps avoid painting indistinguishable overlapping circles.

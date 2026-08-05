@@ -381,6 +381,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
   const pinnedLatLngRef = useRef<
     { latitude: number; longitude: number } | undefined
   >(undefined);
+  const pinPlacementActiveRef = useRef(false);
   const [liveCoordinate, setLiveCoordinate] = useState(() =>
     isSpatialGridValid(grid)
       ? `${grid.origin.latitude.toFixed(6)}, ${grid.origin.longitude.toFixed(6)}`
@@ -391,6 +392,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
     x: number;
     y: number;
   }>();
+  const [pinPlacementActive, setPinPlacementActive] = useState(false);
   const [hoverPosition, setHoverPosition] = useState<{
     x: number;
     y: number;
@@ -420,6 +422,17 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
   const fieldClipActive = clipToField && Boolean(fieldBoundary);
   const activeDisplayFilterCount =
     Number(hideEmptyCells) + Number(hideOutliers) + Number(fieldClipActive);
+
+  const setPinPlacementMode = useCallback((active: boolean) => {
+    pinPlacementActiveRef.current = active;
+    setPinPlacementActive(active);
+  }, []);
+
+  const clearPinnedCoordinate = useCallback(() => {
+    pinnedLatLngRef.current = undefined;
+    setPinnedCoordinate(undefined);
+    setPinnedScreenPosition(undefined);
+  }, []);
 
   useEffect(() => {
     gridRef.current = grid;
@@ -993,17 +1006,6 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
       });
       map.on("mouseout movestart zoomstart", clearHover);
       map.on("click", (event) => {
-        pinnedLatLngRef.current = {
-          latitude: event.latlng.lat,
-          longitude: event.latlng.lng,
-        };
-        setPinnedCoordinate(
-          `${event.latlng.lat.toFixed(6)}, ${event.latlng.lng.toFixed(6)}`,
-        );
-        setPinnedScreenPosition({
-          x: event.containerPoint.x,
-          y: event.containerPoint.y,
-        });
         const candidateIndex = gridCellIndexAt(
           gridRef.current,
           event.latlng.lat,
@@ -1021,7 +1023,29 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
           insideField
             ? candidateIndex
             : undefined;
-        if (index !== undefined) setSelectedCell(index);
+        if (index !== undefined) {
+          clearPinnedCoordinate();
+          setPinPlacementMode(false);
+          setSelectedCell(index);
+          return;
+        }
+        if (pinPlacementActiveRef.current) {
+          setSelectedCell(undefined);
+          pinnedLatLngRef.current = {
+            latitude: event.latlng.lat,
+            longitude: event.latlng.lng,
+          };
+          setPinnedCoordinate(
+            `${event.latlng.lat.toFixed(6)}, ${event.latlng.lng.toFixed(6)}`,
+          );
+          setPinnedScreenPosition({
+            x: event.containerPoint.x,
+            y: event.containerPoint.y,
+          });
+          setPinPlacementMode(false);
+          return;
+        }
+        setSelectedCell(undefined);
       });
       redraw();
     });
@@ -1038,7 +1062,12 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
       mapRef.current = undefined;
       canvasRef.current = undefined;
     };
-  }, [setHoveredCell, setSelectedCell]);
+  }, [
+    clearPinnedCoordinate,
+    setHoveredCell,
+    setPinPlacementMode,
+    setSelectedCell,
+  ]);
 
   useEffect(() => {
     const animationFrame = requestAnimationFrame(() => {
@@ -1047,13 +1076,28 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
           ? `${grid.origin.latitude.toFixed(6)}, ${grid.origin.longitude.toFixed(6)}`
           : "Coordinates unavailable",
       );
-      pinnedLatLngRef.current = undefined;
-      setPinnedCoordinate(undefined);
-      setPinnedScreenPosition(undefined);
+      clearPinnedCoordinate();
+      setPinPlacementMode(false);
       fitGrid();
     });
     return () => cancelAnimationFrame(animationFrame);
-  }, [fitGrid, grid.origin.latitude, grid.origin.longitude, spatiallyValid]);
+  }, [
+    clearPinnedCoordinate,
+    fitGrid,
+    grid.origin.latitude,
+    grid.origin.longitude,
+    setPinPlacementMode,
+    spatiallyValid,
+  ]);
+
+  useEffect(() => {
+    if (selectedCellIndex === undefined) return;
+    const animationFrame = requestAnimationFrame(() => {
+      clearPinnedCoordinate();
+      setPinPlacementMode(false);
+    });
+    return () => cancelAnimationFrame(animationFrame);
+  }, [clearPinnedCoordinate, selectedCellIndex, setPinPlacementMode]);
 
   useEffect(() => {
     initialBaseLayerRef.current = baseLayer;
@@ -1220,9 +1264,30 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
       : 0;
   const hoveredColumn =
     hoveredCellIndex !== undefined ? hoveredCellIndex % grid.columns : 0;
+  const selectedCellCoordinate =
+    selectedCellIndex === undefined
+      ? undefined
+      : geographicCellCenter(
+          grid,
+          Math.floor(selectedCellIndex / grid.columns),
+          selectedCellIndex % grid.columns,
+        );
+  const selectedCoordinate = selectedCellCoordinate
+    ? `${selectedCellCoordinate.latitude.toFixed(6)}, ${selectedCellCoordinate.longitude.toFixed(6)}`
+    : undefined;
+  const displayedCoordinate =
+    selectedCoordinate ?? pinnedCoordinate ?? liveCoordinate;
+  const coordinateKind = selectedCoordinate
+    ? "selected"
+    : pinnedCoordinate
+      ? "pinned"
+      : "live";
 
   return (
-    <main className="map-workspace" aria-label="Interactive ISOXML map">
+    <main
+      className={`map-workspace${pinPlacementActive ? " pin-placement-active" : ""}`}
+      aria-label="Interactive ISOXML map"
+    >
       <div
         className="map-container"
         ref={containerRef}
@@ -1256,6 +1321,29 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
           data-tooltip="Fit active grid to the map"
         >
           <Crosshair size={16} />
+        </button>
+        <button
+          type="button"
+          className={pinPlacementActive ? "active" : ""}
+          onClick={() => setPinPlacementMode(!pinPlacementActive)}
+          aria-label={
+            pinPlacementActive
+              ? "Cancel coordinate pin placement"
+              : "Place a coordinate pin"
+          }
+          aria-pressed={pinPlacementActive}
+          title={
+            pinPlacementActive
+              ? "Cancel coordinate pin placement"
+              : "Place a coordinate pin on empty map space"
+          }
+          data-tooltip={
+            pinPlacementActive
+              ? "Cancel coordinate pin placement"
+              : "Place a coordinate pin"
+          }
+        >
+          <MapPin size={16} />
         </button>
         <div className="map-filter-control" ref={displayFilterControlRef}>
           <button
@@ -1503,12 +1591,12 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
             </div>
           </dl>
           <span className="tooltip-hint">
-            Click to pin this cell and coordinate
+            Click to select this cell and show its coordinate
           </span>
         </div>
       )}
 
-      {pinnedCoordinate && pinnedScreenPosition && (
+      {!selectedCoordinate && pinnedCoordinate && pinnedScreenPosition && (
         <button
           type="button"
           className="map-coordinate-pin"
@@ -1518,24 +1606,20 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
           }}
           aria-label={`Remove pinned coordinate ${pinnedCoordinate}`}
           title="Remove pinned coordinate"
-          onClick={() => {
-            pinnedLatLngRef.current = undefined;
-            setPinnedCoordinate(undefined);
-            setPinnedScreenPosition(undefined);
-          }}
+          onClick={clearPinnedCoordinate}
         >
           <MapPin size={24} aria-hidden="true" />
         </button>
       )}
 
-      <div className={`map-coordinate ${pinnedCoordinate ? "pinned" : "live"}`}>
+      <div className={`map-coordinate ${coordinateKind}`}>
         <LocateFixed size={13} />
-        <span>{pinnedCoordinate ?? liveCoordinate}</span>
-        {pinnedCoordinate ? (
+        <span>{displayedCoordinate}</span>
+        {selectedCoordinate || pinnedCoordinate ? (
           <button
             type="button"
             onClick={() => {
-              void copyTextToClipboard(pinnedCoordinate).then((copied) => {
+              void copyTextToClipboard(displayedCoordinate).then((copied) => {
                 if (!copied) {
                   setMapExportError(
                     "The browser denied clipboard access. Select the coordinate text and copy it manually.",
@@ -1543,12 +1627,20 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
                 }
               });
             }}
-            title="Copy the coordinate pinned by the last map click"
+            title={
+              selectedCoordinate
+                ? "Copy selected cell coordinate"
+                : "Copy pinned coordinate"
+            }
           >
             COPY
           </button>
         ) : (
-          <small>CLICK MAP TO PIN</small>
+          <small>
+            {pinPlacementActive
+              ? "CLICK EMPTY MAP SPACE TO SET PIN"
+              : "CLICK A CELL TO SELECT · USE PIN TOOL FOR GPS"}
+          </small>
         )}
       </div>
       <div className="diagnostic-overlay">

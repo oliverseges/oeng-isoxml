@@ -1500,6 +1500,15 @@ a:focus-visible {
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
+.map-coordinate.selected {
+  border-color: color-mix(in srgb, var(--accent) 62%, transparent);
+}
+
+.map-workspace.pin-placement-active .leaflet-container,
+.map-workspace.pin-placement-active .map-data-canvas {
+  cursor: crosshair;
+}
+
 .map-coordinate button {
   flex: 0 0 auto;
   border: 0;

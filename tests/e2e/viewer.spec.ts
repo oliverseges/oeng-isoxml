@@ -48,9 +48,9 @@ test("selects repeated-DDI products independently and traces a cell to bytes", a
       y: Math.round((box?.height ?? 400) * 0.52),
     },
   });
-  await page
-    .getByTitle("Copy the coordinate pinned by the last map click")
-    .click();
+  await expect(page.locator(".map-coordinate-pin")).toHaveCount(0);
+  await expect(page.locator(".map-coordinate.selected")).toBeVisible();
+  await page.getByTitle("Copy selected cell coordinate").click();
 
   await page.getByRole("tab", { name: "Source", exact: true }).click();
   await expect(page.getByText("Byte offset")).toBeVisible();
@@ -178,7 +178,7 @@ test("exports the active decoded channel as CSV", async ({ page }) => {
   const downloadPromise = page.waitForEvent("download");
   await page
     .getByRole("button", {
-      name: "Export selected grid channel as CSV",
+      name: "Export selected data channel as CSV",
     })
     .click();
   const download = await downloadPromise;

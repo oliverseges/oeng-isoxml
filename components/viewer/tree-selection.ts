@@ -27,3 +27,66 @@ export function isTreeNodeInDataScope(
 ): boolean {
   return selectedScope === "both" || nodeScope === selectedScope;
 }
+
+export interface ExecutedTreeFilterNode {
+  id: string;
+  kind: string;
+  dataScope?: Exclude<TreeDataScope, "both">;
+  taskInstanceId?: string;
+  timeLogInstanceId?: string;
+  timeLogChannelId?: string;
+}
+
+export function emptyExecutedContainerIds(
+  nodes: ExecutedTreeFilterNode[],
+  visibleChannelNodeIds: ReadonlySet<string>,
+): Set<string> {
+  const timeLogNodes = nodes.filter((node) => node.kind === "timelog");
+  const timeLogIdsWithChannels = new Set(
+    nodes.flatMap((node) =>
+      node.timeLogChannelId && node.timeLogInstanceId
+        ? [node.timeLogInstanceId]
+        : [],
+    ),
+  );
+  const timeLogIdsWithVisibleChannels = new Set(
+    nodes.flatMap((node) =>
+      node.timeLogChannelId &&
+      node.timeLogInstanceId &&
+      visibleChannelNodeIds.has(node.id)
+        ? [node.timeLogInstanceId]
+        : [],
+    ),
+  );
+  const hiddenTimeLogIds = new Set(
+    [...timeLogIdsWithChannels].filter(
+      (timeLogId) => !timeLogIdsWithVisibleChannels.has(timeLogId),
+    ),
+  );
+  const hiddenNodeIds = new Set(
+    timeLogNodes.flatMap((node) =>
+      node.timeLogInstanceId && hiddenTimeLogIds.has(node.timeLogInstanceId)
+        ? [node.id]
+        : [],
+    ),
+  );
+
+  for (const node of nodes) {
+    if (node.kind !== "section" || node.dataScope !== "executed") continue;
+    const taskTimeLogs = timeLogNodes.filter(
+      (timeLog) => timeLog.taskInstanceId === node.taskInstanceId,
+    );
+    if (
+      taskTimeLogs.length > 0 &&
+      taskTimeLogs.every(
+        (timeLog) =>
+          timeLog.timeLogInstanceId !== undefined &&
+          hiddenTimeLogIds.has(timeLog.timeLogInstanceId),
+      )
+    ) {
+      hiddenNodeIds.add(node.id);
+    }
+  }
+
+  return hiddenNodeIds;
+}

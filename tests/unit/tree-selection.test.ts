@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  emptyExecutedContainerIds,
   executedChannelTreeLabel,
   isTreeChannelActive,
   isTreeNodeInDataScope,
@@ -42,5 +43,55 @@ describe("dataset-tree channel selection", () => {
     expect(isTreeNodeInDataScope("executed", "planned")).toBe(false);
     expect(isTreeNodeInDataScope("planned", "planned")).toBe(true);
     expect(isTreeNodeInDataScope(undefined, "executed")).toBe(false);
+  });
+
+  it("prunes decoded time logs and their executed branch when every DDI is filtered out", () => {
+    const nodes = [
+      {
+        id: "executed:task-1",
+        kind: "section",
+        dataScope: "executed" as const,
+        taskInstanceId: "task-1",
+      },
+      {
+        id: "timelog:log-1",
+        kind: "timelog",
+        taskInstanceId: "task-1",
+        timeLogInstanceId: "log-1",
+      },
+      {
+        id: "channel:log-1:ddi-1",
+        kind: "channel",
+        taskInstanceId: "task-1",
+        timeLogInstanceId: "log-1",
+        timeLogChannelId: "ddi-1",
+      },
+    ];
+
+    expect(emptyExecutedContainerIds(nodes, new Set())).toEqual(
+      new Set(["timelog:log-1", "executed:task-1"]),
+    );
+    expect(
+      emptyExecutedContainerIds(nodes, new Set(["channel:log-1:ddi-1"])),
+    ).toEqual(new Set());
+  });
+
+  it("keeps undecoded logs visible so their adapter can still be selected", () => {
+    const nodes = [
+      {
+        id: "executed:task-1",
+        kind: "section",
+        dataScope: "executed" as const,
+        taskInstanceId: "task-1",
+      },
+      {
+        id: "timelog:unresolved",
+        kind: "timelog",
+        taskInstanceId: "task-1",
+        timeLogInstanceId: "unresolved",
+      },
+    ];
+
+    expect(emptyExecutedContainerIds(nodes, new Set())).toEqual(new Set());
   });
 });

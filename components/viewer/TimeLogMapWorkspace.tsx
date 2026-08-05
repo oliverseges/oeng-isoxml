@@ -9,10 +9,12 @@ import {
   Filter,
   Layers,
   LocateFixed,
+  MapPin,
   Minus,
   Plus,
   Route,
 } from "lucide-react";
+import { copyTextToClipboard } from "@/lib/client/clipboard";
 import { decodeValue } from "@/lib/isoxml/value-decoder";
 import { extremeOutlierBounds } from "@/lib/isoxml/outliers";
 import {
@@ -108,8 +110,18 @@ export function TimeLogMapWorkspace({
   const leafletRef = useRef<typeof import("leaflet") | undefined>(undefined);
   const drawRef = useRef<() => void>(() => {});
   const pointHitBucketsRef = useRef<MapPointHitBuckets>(new Map());
+  const pinnedLatLngRef = useRef<
+    { latitude: number; longitude: number } | undefined
+  >(undefined);
+  const pinPlacementActiveRef = useRef(false);
   const [baseLayerMenuOpen, setBaseLayerMenuOpen] = useState(false);
   const [liveCoordinate, setLiveCoordinate] = useState("Move over the map");
+  const [pinnedCoordinate, setPinnedCoordinate] = useState<string>();
+  const [pinnedScreenPosition, setPinnedScreenPosition] = useState<{
+    x: number;
+    y: number;
+  }>();
+  const [pinPlacementActive, setPinPlacementActive] = useState(false);
   const [hoveredRecordIndex, setHoveredRecordIndex] = useState<number>();
   const [hoverScreenPosition, setHoverScreenPosition] = useState<{
     x: number;
@@ -132,6 +144,17 @@ export function TimeLogMapWorkspace({
   const channelIndex = timeLog.channels.findIndex(
     (candidate) => candidate.channelId === channel.channelId,
   );
+
+  const setPinPlacementMode = useCallback((active: boolean) => {
+    pinPlacementActiveRef.current = active;
+    setPinPlacementActive(active);
+  }, []);
+
+  const clearPinnedCoordinate = useCallback(() => {
+    pinnedLatLngRef.current = undefined;
+    setPinnedCoordinate(undefined);
+    setPinnedScreenPosition(undefined);
+  }, []);
 
   const numericValues = useMemo(() => {
     const values = new Float64Array(timeLog.decodedRecordCount);
@@ -416,6 +439,17 @@ export function TimeLogMapWorkspace({
         redrawFrame = requestAnimationFrame(() => {
           redrawFrame = undefined;
           drawRef.current();
+          const pinnedLatLng = pinnedLatLngRef.current;
+          if (!pinnedLatLng) return;
+          const point = map.latLngToContainerPoint([
+            pinnedLatLng.latitude,
+            pinnedLatLng.longitude,
+          ]);
+          setPinnedScreenPosition((current) =>
+            current && current.x === point.x && current.y === point.y
+              ? current
+              : { x: point.x, y: point.y },
+          );
         });
       };
       let pendingHover:
@@ -466,12 +500,33 @@ export function TimeLogMapWorkspace({
       });
       map.on("mouseout movestart zoomstart", clearHover);
       map.on("click", (event) => {
-        setSelectedRecord(
-          nearestMapPointIndex(
-            pointHitBucketsRef.current,
-            event.containerPoint,
-          ),
+        const recordIndex = nearestMapPointIndex(
+          pointHitBucketsRef.current,
+          event.containerPoint,
         );
+        if (recordIndex !== undefined) {
+          clearPinnedCoordinate();
+          setPinPlacementMode(false);
+          setSelectedRecord(recordIndex);
+          return;
+        }
+        if (pinPlacementActiveRef.current) {
+          setSelectedRecord(undefined);
+          pinnedLatLngRef.current = {
+            latitude: event.latlng.lat,
+            longitude: event.latlng.lng,
+          };
+          setPinnedCoordinate(
+            `${event.latlng.lat.toFixed(6)}, ${event.latlng.lng.toFixed(6)}`,
+          );
+          setPinnedScreenPosition({
+            x: event.containerPoint.x,
+            y: event.containerPoint.y,
+          });
+          setPinPlacementMode(false);
+          return;
+        }
+        setSelectedRecord(undefined);
       });
       redraw();
     });
@@ -491,7 +546,29 @@ export function TimeLogMapWorkspace({
       mapRef.current = undefined;
       canvasRef.current = undefined;
     };
-  }, [setSelectedRecord, timeLog.bbox]);
+  }, [
+    clearPinnedCoordinate,
+    setPinPlacementMode,
+    setSelectedRecord,
+    timeLog.bbox,
+  ]);
+
+  useEffect(() => {
+    const animationFrame = requestAnimationFrame(() => {
+      clearPinnedCoordinate();
+      setPinPlacementMode(false);
+    });
+    return () => cancelAnimationFrame(animationFrame);
+  }, [clearPinnedCoordinate, setPinPlacementMode, timeLog.instanceId]);
+
+  useEffect(() => {
+    if (selectedRecordIndex === undefined) return;
+    const animationFrame = requestAnimationFrame(() => {
+      clearPinnedCoordinate();
+      setPinPlacementMode(false);
+    });
+    return () => cancelAnimationFrame(animationFrame);
+  }, [clearPinnedCoordinate, selectedRecordIndex, setPinPlacementMode]);
 
   useEffect(() => {
     initialBaseLayerRef.current = baseLayer;
@@ -555,10 +632,31 @@ export function TimeLogMapWorkspace({
     hideOutliers,
     outlierCount,
   );
+  const selectedCoordinate =
+    selectedRecordIndex !== undefined &&
+    timeLog.validPositions[selectedRecordIndex] &&
+    Number.isFinite(timeLog.latitudes[selectedRecordIndex]) &&
+    Number.isFinite(timeLog.longitudes[selectedRecordIndex])
+      ? `${timeLog.latitudes[selectedRecordIndex].toFixed(6)}, ${timeLog.longitudes[selectedRecordIndex].toFixed(6)}`
+      : undefined;
+  const displayedCoordinate =
+    selectedCoordinate ?? pinnedCoordinate ?? liveCoordinate;
+  const coordinateKind = selectedCoordinate
+    ? "selected"
+    : pinnedCoordinate
+      ? "pinned"
+      : "live";
 
   return (
-    <main className="map-workspace" aria-label="Executed ISOXML time-log map">
-      <div className="map-container" ref={containerRef} />
+    <main
+      className={`map-workspace${pinPlacementActive ? " pin-placement-active" : ""}`}
+      aria-label="Executed ISOXML time-log map"
+    >
+      <div
+        className="map-container"
+        ref={containerRef}
+        data-testid="timelog-map"
+      />
       <div className="map-control-stack top-left">
         <button
           type="button"
@@ -587,6 +685,29 @@ export function TimeLogMapWorkspace({
           data-tooltip="Fit executed points to the map"
         >
           <Crosshair size={16} />
+        </button>
+        <button
+          type="button"
+          className={pinPlacementActive ? "active" : ""}
+          onClick={() => setPinPlacementMode(!pinPlacementActive)}
+          aria-label={
+            pinPlacementActive
+              ? "Cancel coordinate pin placement"
+              : "Place a coordinate pin"
+          }
+          aria-pressed={pinPlacementActive}
+          title={
+            pinPlacementActive
+              ? "Cancel coordinate pin placement"
+              : "Place a coordinate pin on empty map space"
+          }
+          data-tooltip={
+            pinPlacementActive
+              ? "Cancel coordinate pin placement"
+              : "Place a coordinate pin"
+          }
+        >
+          <MapPin size={16} />
         </button>
         <button
           type="button"
@@ -746,10 +867,44 @@ export function TimeLogMapWorkspace({
           </div>
         )}
 
-      <div className="map-coordinate live">
+      {!selectedCoordinate && pinnedCoordinate && pinnedScreenPosition && (
+        <button
+          type="button"
+          className="map-coordinate-pin"
+          style={{
+            left: pinnedScreenPosition.x,
+            top: pinnedScreenPosition.y,
+          }}
+          aria-label={`Remove pinned coordinate ${pinnedCoordinate}`}
+          title="Remove pinned coordinate"
+          onClick={clearPinnedCoordinate}
+        >
+          <MapPin size={24} aria-hidden="true" />
+        </button>
+      )}
+
+      <div className={`map-coordinate ${coordinateKind}`}>
         <LocateFixed size={13} />
-        <span>{liveCoordinate}</span>
-        <small>HOVER FOR DETAILS · CLICK TO SELECT</small>
+        <span>{displayedCoordinate}</span>
+        {selectedCoordinate || pinnedCoordinate ? (
+          <button
+            type="button"
+            onClick={() => void copyTextToClipboard(displayedCoordinate)}
+            title={
+              selectedCoordinate
+                ? "Copy selected record coordinate"
+                : "Copy pinned coordinate"
+            }
+          >
+            COPY
+          </button>
+        ) : (
+          <small>
+            {pinPlacementActive
+              ? "CLICK EMPTY MAP SPACE TO SET PIN"
+              : "HOVER FOR DETAILS · CLICK A POINT TO SELECT"}
+          </small>
+        )}
       </div>
       <div className="diagnostic-overlay">
         <Route size={13} />
