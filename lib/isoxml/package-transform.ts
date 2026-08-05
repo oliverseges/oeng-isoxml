@@ -1,6 +1,7 @@
 import { basename } from "./file-loader";
 import type {
   DecodedGrid,
+  DecodedTimeLog,
   IsoXmlDataset,
   IsoXmlObject,
   TaskSummary,
@@ -23,15 +24,23 @@ export interface CleanupTransformPlan {
   keptTaskIds: string[];
   keptGridIds: string[];
   keptChannelIds: string[];
+  /** Unique DecodedTimeLog.instanceId values. Omitted by older callers means keep every log. */
+  keptTimeLogIds?: string[];
   detAssignments: Record<string, string>;
   newDeviceElements: NewDeviceElementSpec[];
+  /** Required when a generated variant removes or remaps executed data. */
+  acknowledgeExecutedDataRisk?: boolean;
+}
+
+export interface MergeTaskGroupPlan {
+  taskIds: string[];
+  mergedTaskName: string;
 }
 
 export interface MergeTransformPlan {
   mode: "merge";
   variantName: string;
-  mergeTaskIds: string[];
-  mergedTaskName: string;
+  mergeGroups: MergeTaskGroupPlan[];
 }
 
 export type PackageTransformPlan = CleanupTransformPlan | MergeTransformPlan;
@@ -73,6 +82,15 @@ function gridsForTask(dataset: IsoXmlDataset, taskId: string): DecodedGrid[] {
   return dataset.grids.filter((grid) => grid.taskId === taskId);
 }
 
+function timeLogsForTask(
+  dataset: IsoXmlDataset,
+  task: TaskSummary,
+): DecodedTimeLog[] {
+  return dataset.timeLogs.filter(
+    (timeLog) => timeLog.taskInstanceId === task.instanceId,
+  );
+}
+
 function gridGeometryMatches(left: DecodedGrid, right: DecodedGrid): boolean {
   const close = (first: number, second: number) =>
     Math.abs(first - second) <=
@@ -111,6 +129,11 @@ function analyzeCleanup(
   const keptTaskIds = new Set(plan.keptTaskIds);
   const keptGridIds = new Set(plan.keptGridIds);
   const keptChannelIds = new Set(plan.keptChannelIds);
+  const keptTimeLogIds = new Set(
+    plan.keptTimeLogIds ??
+      dataset.timeLogs.map((timeLog) => timeLog.instanceId),
+  );
+  let executedDataChanged = false;
   const detIds = new Set(
     dataset.objects
       .filter((object) => object.elementType === "DET")
@@ -286,19 +309,12 @@ function analyzeCleanup(
   }
 
   for (const task of dataset.tasks) {
+    const taskTimeLogs = timeLogsForTask(dataset, task);
     if (!keptTaskIds.has(task.id)) {
-      const object = taskObject(dataset, task);
-      if (
-        object &&
-        (findObjects(object.children, "TLG").length ||
-          findObjects(object.children, "DLV").length)
-      ) {
-        blockers.push(
-          `${task.name} contains executed data; task deletion is blocked until executed-data rewriting is supported.`,
-        );
-      } else {
-        changes.push(`Delete task ${task.name} (${task.id}).`);
-      }
+      if (taskTimeLogs.length) executedDataChanged = true;
+      changes.push(
+        `Delete task ${task.name} (${task.id})${taskTimeLogs.length ? `, including ${taskTimeLogs.length} executed log${taskTimeLogs.length === 1 ? "" : "s"}` : ""}.`,
+      );
       continue;
     }
 
@@ -359,6 +375,46 @@ function analyzeCleanup(
         }
       }
     }
+
+    for (const timeLog of taskTimeLogs) {
+      if (!keptTimeLogIds.has(timeLog.instanceId)) {
+        executedDataChanged = true;
+        changes.push(
+          `Delete executed log ${timeLog.id}, ${timeLog.headerFilename}, and ${timeLog.filename}.`,
+        );
+        continue;
+      }
+      for (const channel of timeLog.channels) {
+        const currentDet = channel.deviceElementId ?? "";
+        const nextDet = plan.detAssignments[channel.channelId] ?? currentDet;
+        if (nextDet && !detIds.has(nextDet)) {
+          blockers.push(
+            `${channel.ddiName || `DDI ${channel.ddiDisplay}`} references unknown DET ${nextDet}.`,
+          );
+        } else if (nextDet !== currentDet) {
+          executedDataChanged = true;
+          if (!timeLog.sourceHeaderKey) {
+            blockers.push(
+              `${timeLog.headerFilename} is unavailable, so its executed DLV references cannot be remapped.`,
+            );
+          }
+          changes.push(
+            `${timeLog.id} · DDI ${channel.ddiDisplay}: ${currentDet || "no DET"} → ${nextDet || "no DET"}.`,
+          );
+        }
+      }
+    }
+  }
+
+  if (executedDataChanged) {
+    if (!plan.acknowledgeExecutedDataRisk) {
+      blockers.push(
+        "Acknowledge the executed-data warning before removing or remapping time logs.",
+      );
+    }
+    warnings.unshift(
+      "HIGH RISK — The generated variant changes executed-data declarations or references. Its time-log records may be operational evidence; verify the result before using it downstream. The source package remains unchanged.",
+    );
   }
 
   if (!changes.length) {
@@ -372,22 +428,26 @@ function analyzeCleanup(
   return { blockers, warnings, changes };
 }
 
-function analyzeMerge(
+function analyzeMergeGroup(
   dataset: IsoXmlDataset,
-  plan: MergeTransformPlan,
+  group: MergeTaskGroupPlan,
+  requireCompleteGroup: boolean,
 ): TransformAnalysis {
   const blockers: string[] = [];
   const warnings: string[] = [];
   const changes: string[] = [];
-  const tasks = plan.mergeTaskIds.flatMap((id) => {
+  const tasks = group.taskIds.flatMap((id) => {
     const task = dataset.tasks.find((candidate) => candidate.id === id);
     return task ? [task] : [];
   });
 
-  if (!plan.variantName.trim()) blockers.push("Enter a variant name.");
-  if (!plan.mergedTaskName.trim()) blockers.push("Enter a merged task name.");
-  if (tasks.length < 2) blockers.push("Select at least two tasks to merge.");
-  if (tasks.length !== plan.mergeTaskIds.length) {
+  if (requireCompleteGroup && !group.mergedTaskName.trim()) {
+    blockers.push("Enter a merged task name.");
+  }
+  if (requireCompleteGroup && tasks.length < 2) {
+    blockers.push("Select at least two tasks to merge.");
+  }
+  if (tasks.length !== group.taskIds.length) {
     blockers.push("One or more selected tasks no longer exist.");
   }
   if (tasks.length < 2) return { blockers, warnings, changes };
@@ -495,6 +555,59 @@ function analyzeMerge(
   return { blockers, warnings, changes };
 }
 
+/** Returns only structural/context reasons why the supplied tasks cannot share one merge group. */
+export function mergeTaskCompatibilityIssues(
+  dataset: IsoXmlDataset,
+  taskIds: string[],
+): string[] {
+  return analyzeMergeGroup(
+    dataset,
+    { taskIds, mergedTaskName: "Compatibility check" },
+    false,
+  ).blockers;
+}
+
+function analyzeMerge(
+  dataset: IsoXmlDataset,
+  plan: MergeTransformPlan,
+): TransformAnalysis {
+  const blockers: string[] = [];
+  const warnings: string[] = [];
+  const changes: string[] = [];
+
+  if (!plan.variantName.trim()) blockers.push("Enter a variant name.");
+  if (!plan.mergeGroups.length) blockers.push("Add at least one merge group.");
+
+  const taskGroups = new Map<string, number[]>();
+  plan.mergeGroups.forEach((group, index) => {
+    group.taskIds.forEach((taskId) => {
+      taskGroups.set(taskId, [...(taskGroups.get(taskId) ?? []), index + 1]);
+    });
+    const groupAnalysis = analyzeMergeGroup(dataset, group, true);
+    blockers.push(
+      ...groupAnalysis.blockers.map(
+        (blocker) => `Merge ${index + 1}: ${blocker}`,
+      ),
+    );
+    warnings.push(
+      ...groupAnalysis.warnings.map(
+        (warning) => `Merge ${index + 1}: ${warning}`,
+      ),
+    );
+    changes.push(...groupAnalysis.changes);
+  });
+
+  for (const [taskId, groups] of taskGroups) {
+    if (groups.length > 1) {
+      blockers.push(
+        `${taskId} is assigned to more than one merge group (${groups.join(", ")}).`,
+      );
+    }
+  }
+
+  return { blockers, warnings, changes };
+}
+
 export function analyzePackageTransform(
   dataset: IsoXmlDataset,
   plan: PackageTransformPlan,
@@ -593,6 +706,44 @@ function gridElement(task: Element, grid: DecodedGrid): Element | undefined {
   });
 }
 
+function timeLogElement(
+  task: Element,
+  timeLog: DecodedTimeLog,
+): Element | undefined {
+  const expectedNames = new Set(
+    [timeLog.id, timeLog.filename, timeLog.headerFilename].map((value) =>
+      basename(value)
+        .replace(/\.[^.]+$/, "")
+        .toUpperCase(),
+    ),
+  );
+  return elementsByTag(task, "TLG").find((element) => {
+    const declaredName = (
+      element.getAttribute("A") ??
+      element.getAttribute("Filename") ??
+      ""
+    )
+      .replace(/\.[^.]+$/, "")
+      .toUpperCase();
+    return expectedNames.has(declaredName);
+  });
+}
+
+function rawTimeLogHeader(
+  dataset: IsoXmlDataset,
+  timeLog: DecodedTimeLog,
+): string | undefined {
+  if (timeLog.sourceHeaderKey) {
+    const exact = dataset.rawXmlByFile[timeLog.sourceHeaderKey];
+    if (exact) return exact;
+  }
+  const expected = gridFileKey(timeLog.headerFilename);
+  const matchingKey = Object.keys(dataset.rawXmlByFile).find(
+    (key) => gridFileKey(key) === expected,
+  );
+  return matchingKey ? dataset.rawXmlByFile[matchingKey] : undefined;
+}
+
 function gridFileKey(filename: string): string {
   return basename(filename).toUpperCase();
 }
@@ -610,6 +761,10 @@ function transformCleanupDocument(
   const keptTaskIds = new Set(plan.keptTaskIds);
   const keptGridIds = new Set(plan.keptGridIds);
   const keptChannelIds = new Set(plan.keptChannelIds);
+  const keptTimeLogIds = new Set(
+    plan.keptTimeLogIds ??
+      dataset.timeLogs.map((timeLog) => timeLog.instanceId),
+  );
 
   for (const definition of plan.newDeviceElements) {
     const device = elementById(document, "DVC", definition.deviceId);
@@ -630,8 +785,13 @@ function transformCleanupDocument(
     const element = taskElement(document, task.id);
     if (!element) continue;
     const grids = gridsForTask(dataset, task.id);
+    const timeLogs = timeLogsForTask(dataset, task);
     if (!keptTaskIds.has(task.id)) {
       grids.forEach((grid) => removedFiles.add(gridFileKey(grid.filename)));
+      timeLogs.forEach((timeLog) => {
+        removedFiles.add(gridFileKey(timeLog.filename));
+        removedFiles.add(gridFileKey(timeLog.headerFilename));
+      });
       element.remove();
       continue;
     }
@@ -666,6 +826,46 @@ function transformCleanupDocument(
         xmlGrid?.setAttribute("H", String(bytes.byteLength));
       }
     }
+
+    for (const timeLog of timeLogs) {
+      const xmlTimeLog = timeLogElement(element, timeLog);
+      if (!keptTimeLogIds.has(timeLog.instanceId)) {
+        removedFiles.add(gridFileKey(timeLog.filename));
+        removedFiles.add(gridFileKey(timeLog.headerFilename));
+        xmlTimeLog?.remove();
+        continue;
+      }
+
+      const changedChannels = timeLog.channels.filter((channel) => {
+        const currentDet = channel.deviceElementId ?? "";
+        return (
+          (plan.detAssignments[channel.channelId] ?? currentDet) !== currentDet
+        );
+      });
+      if (!changedChannels.length) continue;
+
+      const headerXml = rawTimeLogHeader(dataset, timeLog);
+      if (!headerXml) continue;
+      assertSafeXml(headerXml);
+      const headerDocument = new DOMParser().parseFromString(
+        headerXml,
+        "application/xml",
+      );
+      if (headerDocument.querySelector("parsererror")) continue;
+      const declarations = elementsByTag(headerDocument, "DLV");
+      for (const channel of changedChannels) {
+        const declaration = declarations[channel.dlvIndex];
+        if (!declaration) continue;
+        const currentDet = channel.deviceElementId ?? "";
+        const nextDet = plan.detAssignments[channel.channelId] ?? currentDet;
+        if (nextDet) declaration.setAttribute("C", nextDet);
+        else declaration.removeAttribute("C");
+      }
+      rewrittenFiles.set(
+        gridFileKey(timeLog.headerFilename),
+        new TextEncoder().encode(serializedTaskData(headerDocument)),
+      );
+    }
   }
   return { removedFiles, rewrittenFiles };
 }
@@ -678,47 +878,50 @@ function transformMergeDocument(
   removedFiles: Set<string>;
   rewrittenFiles: Map<string, Uint8Array>;
 } {
-  const tasks = plan.mergeTaskIds.map(
-    (id) => dataset.tasks.find((task) => task.id === id) as TaskSummary,
-  );
-  const taskElements = tasks.map(
-    (task) => taskElement(document, task.id) as Element,
-  );
-  const grids = tasks.map(
-    (task) => gridsForTask(dataset, task.id)[0] as DecodedGrid,
-  );
-  const primaryTask = taskElements[0];
-  const primaryGrid = grids[0];
-  const primaryZone = elementsByTag(primaryTask, "TZN")[0];
-  const primaryGridElement = gridElement(primaryTask, primaryGrid);
-  const mergedChannels: Array<{ rawValues: Int32Array }> = [];
-
-  grids.forEach((grid) => {
-    grid.rawValues.forEach((rawValues) => mergedChannels.push({ rawValues }));
-  });
-  for (let index = 1; index < taskElements.length; index += 1) {
-    const secondaryZone = elementsByTag(taskElements[index], "TZN")[0];
-    directChildren(secondaryZone, "PDV").forEach((pdv) => {
-      primaryZone.appendChild(pdv.cloneNode(true));
-    });
-  }
-
-  const bytes = encodeGridChannels(
-    mergedChannels,
-    primaryGrid.expectedCellCount,
-  );
-  primaryTask.setAttribute("B", plan.mergedTaskName.trim());
-  primaryGridElement?.setAttribute("H", String(bytes.byteLength));
-
   const removedFiles = new Set<string>();
-  for (let index = 1; index < taskElements.length; index += 1) {
-    removedFiles.add(gridFileKey(grids[index].filename));
-    taskElements[index].remove();
+  const rewrittenFiles = new Map<string, Uint8Array>();
+
+  for (const group of plan.mergeGroups) {
+    const tasks = group.taskIds.map(
+      (id) => dataset.tasks.find((task) => task.id === id) as TaskSummary,
+    );
+    const taskElements = tasks.map(
+      (task) => taskElement(document, task.id) as Element,
+    );
+    const grids = tasks.map(
+      (task) => gridsForTask(dataset, task.id)[0] as DecodedGrid,
+    );
+    const primaryTask = taskElements[0];
+    const primaryGrid = grids[0];
+    const primaryZone = elementsByTag(primaryTask, "TZN")[0];
+    const primaryGridElement = gridElement(primaryTask, primaryGrid);
+    const mergedChannels: Array<{ rawValues: Int32Array }> = [];
+
+    grids.forEach((grid) => {
+      grid.rawValues.forEach((rawValues) => mergedChannels.push({ rawValues }));
+    });
+    for (let index = 1; index < taskElements.length; index += 1) {
+      const secondaryZone = elementsByTag(taskElements[index], "TZN")[0];
+      directChildren(secondaryZone, "PDV").forEach((pdv) => {
+        primaryZone.appendChild(pdv.cloneNode(true));
+      });
+    }
+
+    const bytes = encodeGridChannels(
+      mergedChannels,
+      primaryGrid.expectedCellCount,
+    );
+    primaryTask.setAttribute("B", group.mergedTaskName.trim());
+    primaryGridElement?.setAttribute("H", String(bytes.byteLength));
+    rewrittenFiles.set(gridFileKey(primaryGrid.filename), bytes);
+
+    for (let index = 1; index < taskElements.length; index += 1) {
+      removedFiles.add(gridFileKey(grids[index].filename));
+      taskElements[index].remove();
+    }
   }
-  return {
-    removedFiles,
-    rewrittenFiles: new Map([[gridFileKey(primaryGrid.filename), bytes]]),
-  };
+
+  return { removedFiles, rewrittenFiles };
 }
 
 function parsePrimaryDocument(dataset: IsoXmlDataset): {

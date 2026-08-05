@@ -62,19 +62,23 @@ lightweight UI state → cached raster/batched Leaflet canvas + inspector/table
 ## Package variant flow
 
 ```text
-Current dataset → edit plan → compatibility preflight
+Current dataset → cleanup/remap plan → compatibility + risk preflight
+        ↓                              ↘ optional in-memory continuation
+rewrite TASKDATA, time-log headers      normal importer → merge-group editor
+and supported Type 2 grid payloads                       ↓
+        ↓                                  multi-group compatibility preflight
+create ZIP → normal importer/validation → optional download
         ↓
-rewrite TASKDATA.XML + affected Type 2 grid binaries
-        ↓
-create ZIP → normal importer/validation → download
-        ↓
-store and select variant while retaining the source dataset
+store and select each variant while retaining its source dataset
 ```
 
 Variant authoring is deliberately narrower than viewing. It can remove tasks,
-grids and Type 2 PDVs, add a DET under an existing DVC, reassign DET references,
-and merge tasks only when their single grids and task context are compatible. It
-does not synthesize a new DVC/DOR/DPD/DPT graph or rewrite executed data.
+grids, Type 2 PDVs and complete time logs; add a DET under an existing DVC;
+reassign planned PDV and executed DLV device-element references; and process
+multiple disjoint merge groups when each group's single grids and task context
+are compatible. Executed edits require explicit acknowledgement. DLV order and
+time-log record bytes are preserved, so individual executed channels cannot be
+removed. The editor does not synthesize a new DVC/DOR/DPD/DPT graph.
 
 ## Initial vertical slice
 

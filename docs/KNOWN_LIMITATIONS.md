@@ -20,10 +20,11 @@ The shipped version is a production-quality vertical slice, not a complete ISOXM
 - Map PNG composition includes the current viewport, active planned cells or executed points, selected background, boundary and a compact legend while omitting controls and transient hover/pin overlays. A persistent selected cell or executed record includes its outline and value card when its anchor is inside the viewport. Remote tile pixels depend on provider CORS behavior; the UI suggests exporting without a background when the browser blocks them.
 - Active planned/executed-channel CSV and map PNG are the current user-facing data exports. GeoJSON serialization exists as a library helper but is not yet wired to a control; validation and object-registry JSON exports are not implemented.
 - Up to ten recent datasets are stored locally when browser quota and the configured size limits allow it.
-- Package variants support a guarded subset of authoring: task/grid deletion, Type 2 PDV removal, DET creation inside an existing DVC, DET reassignment and compatible single-grid task merging.
+- Package variants support a guarded subset of authoring: task/grid deletion, Type 2 PDV removal, complete time-log deletion, DET creation inside an existing DVC, planned PDV/executed DLV DET reassignment and multiple disjoint compatible single-grid task merge groups.
 - New DET authoring covers its ID, device object ID, type, designator, element number and parent object ID. Creating a new DVC or DOR/DPD/DPT graph is not available.
-- Task merging requires the same resolved field, customer, farm, task status, grid origin, dimensions, cell size and orientation. Different fields cannot be merged into one TSK.
-- Tasks with executed data, incomplete grids, ambiguous treatment zones and unsupported task children are blocked from transforms that would require rewriting them.
+- Task merging requires the same resolved field, customer, farm, task status, grid origin, dimensions, cell size and orientation. Different fields cannot be merged into one TSK; after a group's first selection the editor disables incompatible candidates and reports why.
+- Executed-data editing is limited to complete-log removal and DLV device-element reassignment. It requires explicit risk acknowledgement and preserves DLV order plus BIN record bytes; individual executed-channel removal is not supported.
+- Incomplete grids, ambiguous treatment zones and unsupported task children are blocked from transforms that would require rewriting them.
 - Variant XML is semantically reserialized rather than byte-for-byte round-tripped. The untouched source dataset remains available separately.
 - Duplicate package paths are all listed and retained under separate internal storage keys. Typed lookup uses the first exact path occurrence, and variant creation is blocked so a generated ZIP cannot silently collapse those occurrences.
 

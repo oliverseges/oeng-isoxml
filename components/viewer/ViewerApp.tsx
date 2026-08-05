@@ -43,7 +43,10 @@ import { TimeLogAdapterWorkspace } from "./TimeLogAdapterControl";
 import { TimeLogMapWorkspace } from "./TimeLogMapWorkspace";
 import { currentDataset, useViewerStore } from "./store";
 import { TopBar } from "./TopBar";
-import { TransformPackageDialog } from "./TransformPackageDialog";
+import {
+  TransformPackageDialog,
+  type VariantCreationAction,
+} from "./TransformPackageDialog";
 
 type PanelName = "left" | "right" | "bottom";
 
@@ -86,6 +89,12 @@ export function ViewerApp() {
   const [importError, setImportError] = useState<string>();
   const [pendingZipFiles, setPendingZipFiles] = useState<File[]>();
   const [transformDialogOpen, setTransformDialogOpen] = useState(false);
+  const [transformDialogMode, setTransformDialogMode] = useState<
+    "cleanup" | "merge"
+  >("cleanup");
+  const [transformDialogVariantName, setTransformDialogVariantName] =
+    useState<string>();
+  const [transformDialogNonce, setTransformDialogNonce] = useState(0);
   const [dragActive, setDragActive] = useState(false);
   const [adapterBusyId, setAdapterBusyId] = useState<string>();
   const shellRef = useRef<HTMLDivElement>(null);
@@ -410,7 +419,10 @@ export function ViewerApp() {
     }
   };
 
-  const createVariant = async (plan: PackageTransformPlan) => {
+  const createVariant = async (
+    plan: PackageTransformPlan,
+    action: VariantCreationAction,
+  ) => {
     if (!dataset) return;
     try {
       setImportError(undefined);
@@ -428,8 +440,16 @@ export function ViewerApp() {
         replaceRecentDatasetIds([dataset.id, ...currentRecentIds].slice(0, 10));
         void datasetRepository.persist(dataset);
       }
-      downloadBlob(transformed.file, transformed.file.name);
+      if (action === "download") {
+        downloadBlob(transformed.file, transformed.file.name);
+      }
       applyDataset(nextDataset, true);
+      if (action === "continue-to-merge") {
+        setTransformDialogMode("merge");
+        setTransformDialogVariantName(plan.variantName.trim());
+        setTransformDialogNonce((current) => current + 1);
+        setTransformDialogOpen(true);
+      }
     } catch (error) {
       setProgress(undefined);
       setImportError(
@@ -475,7 +495,12 @@ export function ViewerApp() {
         onRemoveDataset={(id) => void removeStoredDataset(id)}
         onClearDatasets={() => void clearStoredDatasets()}
         onImportFiles={(files) => onFiles(files, "Selected ISOXML files")}
-        onTransform={() => setTransformDialogOpen(true)}
+        onTransform={() => {
+          setTransformDialogMode("cleanup");
+          setTransformDialogVariantName(undefined);
+          setTransformDialogNonce((current) => current + 1);
+          setTransformDialogOpen(true);
+        }}
         onExport={exportActive}
         canExport={Boolean(
           dataset &&
@@ -681,7 +706,10 @@ export function ViewerApp() {
 
       {transformDialogOpen && dataset && (
         <TransformPackageDialog
+          key={`${dataset.id}:${transformDialogNonce}`}
           dataset={dataset}
+          initialMode={transformDialogMode}
+          initialVariantName={transformDialogVariantName}
           onCancel={() => setTransformDialogOpen(false)}
           onCreate={createVariant}
         />

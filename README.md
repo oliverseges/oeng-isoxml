@@ -23,10 +23,12 @@ This project does **not** claim ISO 11783 conformance. The bundled public DDI me
 - Product, DET, PDV, VPN and binary-offset inspection.
 - All 765 public DDI entries from ISOBUS Data Dictionary version 2026050501, including definitions, units, bit resolutions, ranges, device classes and links to the correct official record.
 - Manifest hashes, severity-sorted validation details, multi-file raw source, active planned/executed-channel CSV export and planned/executed-map PNG export.
-- Non-destructive package variants: remove tasks, grids or Type 2 PDVs; add a
-  DET to an existing DVC; remap DET references; or merge compatible single-grid
-  tasks. Generated ZIPs are downloaded, re-imported, selected for preview and
-  kept beside the source.
+- Non-destructive package variants: remove tasks, grids, Type 2 PDVs or complete
+  executed logs; add a DET to an existing DVC; remap planned PDV and executed
+  DLV device-element references; or build several independent groups of
+  compatible single-grid task merges. Cleanup can continue directly into merge
+  without downloading an intermediate package. Final ZIPs are re-imported,
+  selected for preview and kept beside the source.
 - Dark/light appearance, resizable/collapsible panels, container-aware map redraws and keyboard focus.
 
 See [support matrix](docs/SUPPORT_MATRIX.md) and [known limitations](docs/KNOWN_LIMITATIONS.md) before using the viewer for production decisions.

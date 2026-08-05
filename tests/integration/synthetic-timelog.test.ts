@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { analyzePackageTransform } from "@/lib/isoxml/package-transform";
 import { buildDataset } from "@/lib/isoxml/pipeline";
 import { redecodeDatasetTimeLog } from "@/lib/isoxml/timelog-adapters";
 
@@ -83,6 +84,33 @@ describe("time-log package pipeline", () => {
       ["TLG00001.XML", true, false],
       ["TLG00001.BIN", true, false],
     ]);
+
+    const removalPlan = {
+      mode: "cleanup" as const,
+      variantName: "Executed log removed",
+      keptTaskIds: ["TSK1"],
+      keptGridIds: [],
+      keptChannelIds: [],
+      keptTimeLogIds: [],
+      detAssignments: {
+        [dataset.timeLogs[0].channels[0].channelId]: "DET1",
+      },
+      newDeviceElements: [],
+    };
+    const unacknowledged = analyzePackageTransform(dataset, removalPlan);
+    expect(
+      unacknowledged.blockers.some((message) =>
+        message.includes("Acknowledge the executed-data warning"),
+      ),
+    ).toBe(true);
+
+    const accepted = analyzePackageTransform(dataset, {
+      ...removalPlan,
+      acknowledgeExecutedDataRisk: true,
+    });
+    expect(accepted.blockers).toEqual([]);
+    expect(accepted.changes[0]).toContain("Delete executed log TLG00001");
+    expect(accepted.warnings[0]).toContain("HIGH RISK");
   });
 
   it("retains an uncertain log until a manual adapter re-decodes it", async () => {

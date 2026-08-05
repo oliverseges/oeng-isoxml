@@ -2,7 +2,10 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { analyzePackageTransform } from "@/lib/isoxml/package-transform";
+import {
+  analyzePackageTransform,
+  mergeTaskCompatibilityIssues,
+} from "@/lib/isoxml/package-transform";
 import { buildDataset } from "@/lib/isoxml/pipeline";
 import {
   gridCellAreaSquareMeters,
@@ -37,7 +40,12 @@ async function fixtureFiles(truncateBy = 0) {
   ];
 }
 
-function withCompatibleSecondTask(dataset: IsoXmlDataset): IsoXmlDataset {
+function withCompatibleTask(
+  dataset: IsoXmlDataset,
+  taskId: string,
+  gridId: string,
+  taskName: string,
+): IsoXmlDataset {
   const copy = structuredClone(dataset);
   const sourceTask = copy.tasks[0];
   const sourceTaskObject = copy.objects.find(
@@ -46,32 +54,41 @@ function withCompatibleSecondTask(dataset: IsoXmlDataset): IsoXmlDataset {
   if (!sourceTaskObject) throw new Error("Synthetic task object is missing.");
 
   const copiedTaskObject = structuredClone(sourceTaskObject);
-  copiedTaskObject.uid = `${sourceTaskObject.uid}:copy`;
-  copiedTaskObject.id = "TSK2";
+  copiedTaskObject.uid = `${sourceTaskObject.uid}:${taskId}`;
+  copiedTaskObject.id = taskId;
   copiedTaskObject.attributes = {
     ...copiedTaskObject.attributes,
-    A: "TSK2",
-    B: "Second compatible task",
+    A: taskId,
+    B: taskName,
   };
   copy.objects.push(copiedTaskObject);
   copy.tasks.push({
     ...structuredClone(sourceTask),
-    instanceId: `${sourceTask.instanceId}:copy`,
-    id: "TSK2",
+    instanceId: `${sourceTask.instanceId}:${taskId}`,
+    id: taskId,
     objectUid: copiedTaskObject.uid,
-    name: "Second compatible task",
-    gridIds: ["GRD00002"],
+    name: taskName,
+    gridIds: [gridId],
   });
   copy.grids.push({
     ...structuredClone(copy.grids[0]),
-    instanceId: `${copy.grids[0].instanceId}:copy`,
-    id: "GRD00002",
-    taskInstanceId: `${sourceTask.instanceId}:copy`,
-    taskId: "TSK2",
-    name: "GRD00002",
-    filename: "GRD00002.BIN",
+    instanceId: `${copy.grids[0].instanceId}:${gridId}`,
+    id: gridId,
+    taskInstanceId: `${sourceTask.instanceId}:${taskId}`,
+    taskId,
+    name: gridId,
+    filename: `${gridId}.BIN`,
   });
   return copy;
+}
+
+function withCompatibleSecondTask(dataset: IsoXmlDataset): IsoXmlDataset {
+  return withCompatibleTask(
+    dataset,
+    "TSK2",
+    "GRD00002",
+    "Second compatible task",
+  );
 }
 
 describe("synthetic multi-PDV Type 2 vertical slice", () => {
@@ -428,8 +445,12 @@ describe("synthetic multi-PDV Type 2 vertical slice", () => {
     const compatible = analyzePackageTransform(dataset, {
       mode: "merge",
       variantName: "Combined task",
-      mergeTaskIds: ["TSK1", "TSK2"],
-      mergedTaskName: "Combined North 40",
+      mergeGroups: [
+        {
+          taskIds: ["TSK1", "TSK2"],
+          mergedTaskName: "Combined North 40",
+        },
+      ],
     });
 
     expect(compatible.blockers).toEqual([]);
@@ -441,12 +462,64 @@ describe("synthetic multi-PDV Type 2 vertical slice", () => {
     const differentField = analyzePackageTransform(dataset, {
       mode: "merge",
       variantName: "Invalid merge",
-      mergeTaskIds: ["TSK1", "TSK2"],
-      mergedTaskName: "Invalid merge",
+      mergeGroups: [
+        {
+          taskIds: ["TSK1", "TSK2"],
+          mergedTaskName: "Invalid merge",
+        },
+      ],
     });
     expect(
       differentField.blockers.some((message) =>
         message.includes("share one resolved field"),
+      ),
+    ).toBe(true);
+    expect(
+      mergeTaskCompatibilityIssues(dataset, ["TSK1", "TSK2"]).some((message) =>
+        message.includes("share one resolved field"),
+      ),
+    ).toBe(true);
+  });
+
+  it("preflights multiple independent merge groups and rejects reuse", async () => {
+    let dataset = await buildDataset(await fixtureFiles(), "test fixture");
+    dataset = withCompatibleTask(dataset, "TSK2", "GRD00002", "Task two");
+    dataset = withCompatibleTask(dataset, "TSK3", "GRD00003", "Task three");
+    dataset = withCompatibleTask(dataset, "TSK4", "GRD00004", "Task four");
+    const plan = {
+      mode: "merge" as const,
+      variantName: "Two combined tasks",
+      mergeGroups: [
+        {
+          taskIds: ["TSK1", "TSK2"],
+          mergedTaskName: "Combined one",
+        },
+        {
+          taskIds: ["TSK3", "TSK4"],
+          mergedTaskName: "Combined two",
+        },
+      ],
+    };
+
+    const compatible = analyzePackageTransform(dataset, plan);
+    expect(compatible.blockers).toEqual([]);
+    expect(
+      compatible.changes.filter((message) => message.includes("Merge 2 tasks")),
+    ).toHaveLength(2);
+
+    const duplicate = analyzePackageTransform(dataset, {
+      ...plan,
+      mergeGroups: [
+        plan.mergeGroups[0],
+        {
+          ...plan.mergeGroups[1],
+          taskIds: ["TSK2", "TSK3"],
+        },
+      ],
+    });
+    expect(
+      duplicate.blockers.some((message) =>
+        message.includes("assigned to more than one merge group"),
       ),
     ).toBe(true);
   });

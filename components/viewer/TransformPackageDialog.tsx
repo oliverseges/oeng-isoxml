@@ -10,10 +10,13 @@ import {
 } from "react";
 import {
   AlertTriangle,
+  ArrowRight,
   CheckCircle2,
   GitMerge,
   Layers3,
   PackageCheck,
+  Plus,
+  Route,
   ShieldCheck,
   Sparkles,
   Trash2,
@@ -22,6 +25,7 @@ import {
 } from "lucide-react";
 import {
   analyzePackageTransform,
+  mergeTaskCompatibilityIssues,
   type CleanupTransformPlan,
   type MergeTransformPlan,
   type NewDeviceElementSpec,
@@ -31,28 +35,40 @@ import type { IsoXmlDataset } from "@/lib/isoxml/types";
 
 interface TransformPackageDialogProps {
   dataset: IsoXmlDataset;
+  initialMode?: "cleanup" | "merge";
+  initialVariantName?: string;
   onCancel: () => void;
-  onCreate: (plan: PackageTransformPlan) => Promise<void>;
+  onCreate: (
+    plan: PackageTransformPlan,
+    action: VariantCreationAction,
+  ) => Promise<void>;
 }
+
+export type VariantCreationAction = "download" | "continue-to-merge";
 
 interface NewDeviceElementDraft extends NewDeviceElementSpec {
   draftId: string;
 }
 
+interface MergeGroupDraft {
+  draftId: string;
+  taskIds: Set<string>;
+  mergedTaskName: string;
+}
+
 export function TransformPackageDialog({
   dataset,
+  initialMode = "cleanup",
+  initialVariantName,
   onCancel,
   onCreate,
 }: TransformPackageDialogProps) {
   const dvcObjects = dataset.objects.filter(
     (object) => object.elementType === "DVC" && object.id,
   );
-  const [mode, setMode] = useState<"cleanup" | "merge">("cleanup");
+  const [mode, setMode] = useState<"cleanup" | "merge">(initialMode);
   const [variantName, setVariantName] = useState(
-    `${dataset.title} transformed`,
-  );
-  const [mergedTaskName, setMergedTaskName] = useState(
-    `Combined ${dataset.tasks[0]?.fieldName ?? "task"}`,
+    initialVariantName ?? `${dataset.title} transformed`,
   );
   const [keptTaskIds, setKeptTaskIds] = useState(
     () => new Set(dataset.tasks.map((task) => task.id)),
@@ -68,22 +84,33 @@ export function TransformPackageDialog({
         ),
       ),
   );
+  const [keptTimeLogIds, setKeptTimeLogIds] = useState(
+    () => new Set(dataset.timeLogs.map((timeLog) => timeLog.instanceId)),
+  );
   const [detAssignments, setDetAssignments] = useState<Record<string, string>>(
     () =>
       Object.fromEntries(
-        dataset.grids.flatMap((grid) =>
-          grid.channels.map((channel) => [
-            channel.channelId,
-            channel.deviceElementId ?? "",
-          ]),
-        ),
+        [
+          ...dataset.grids.flatMap((grid) => grid.channels),
+          ...dataset.timeLogs.flatMap((timeLog) => timeLog.channels),
+        ].map((channel) => [channel.channelId, channel.deviceElementId ?? ""]),
       ),
   );
   const [newDeviceElements, setNewDeviceElements] = useState<
     NewDeviceElementDraft[]
   >([]);
-  const [mergeTaskIds, setMergeTaskIds] = useState(() => new Set<string>());
-  const [creating, setCreating] = useState(false);
+  const [executedRiskAccepted, setExecutedRiskAccepted] = useState(false);
+  const [mergeGroups, setMergeGroups] = useState<MergeGroupDraft[]>(() => [
+    {
+      draftId: "merge-1",
+      taskIds: new Set<string>(),
+      mergedTaskName: `Combined ${dataset.tasks[0]?.fieldName ?? "task"}`,
+    },
+  ]);
+  const [activeMergeGroupId, setActiveMergeGroupId] = useState("merge-1");
+  const mergeGroupCounter = useRef(1);
+  const [creatingAction, setCreatingAction] = useState<VariantCreationAction>();
+  const creating = Boolean(creatingAction);
   const lastNewDetRef = useRef<HTMLElement>(null);
   const previousNewDetCount = useRef(0);
 
@@ -117,7 +144,9 @@ export function TransformPackageDialog({
             keptTaskIds: [...keptTaskIds],
             keptGridIds: [...keptGridIds],
             keptChannelIds: [...keptChannelIds],
+            keptTimeLogIds: [...keptTimeLogIds],
             detAssignments,
+            acknowledgeExecutedDataRisk: executedRiskAccepted,
             newDeviceElements: newDeviceElements.map((element) => ({
               id: element.id,
               deviceId: element.deviceId,
@@ -131,16 +160,19 @@ export function TransformPackageDialog({
         : ({
             mode,
             variantName,
-            mergeTaskIds: [...mergeTaskIds],
-            mergedTaskName,
+            mergeGroups: mergeGroups.map((group) => ({
+              taskIds: [...group.taskIds],
+              mergedTaskName: group.mergedTaskName,
+            })),
           } satisfies MergeTransformPlan),
     [
       detAssignments,
+      executedRiskAccepted,
       keptChannelIds,
       keptGridIds,
       keptTaskIds,
-      mergeTaskIds,
-      mergedTaskName,
+      keptTimeLogIds,
+      mergeGroups,
       mode,
       newDeviceElements,
       variantName,
@@ -150,6 +182,80 @@ export function TransformPackageDialog({
     () => analyzePackageTransform(dataset, plan),
     [dataset, plan],
   );
+  const executedDataChanged = useMemo(
+    () =>
+      dataset.timeLogs.some((timeLog) => {
+        const task = dataset.tasks.find(
+          (candidate) => candidate.instanceId === timeLog.taskInstanceId,
+        );
+        if (task && !keptTaskIds.has(task.id)) return true;
+        if (!keptTimeLogIds.has(timeLog.instanceId)) return true;
+        return timeLog.channels.some(
+          (channel) =>
+            (detAssignments[channel.channelId] ??
+              channel.deviceElementId ??
+              "") !== (channel.deviceElementId ?? ""),
+        );
+      }),
+    [
+      dataset.tasks,
+      dataset.timeLogs,
+      detAssignments,
+      keptTaskIds,
+      keptTimeLogIds,
+    ],
+  );
+  const activeMergeGroup =
+    mergeGroups.find((group) => group.draftId === activeMergeGroupId) ??
+    mergeGroups[0];
+  const mergeTaskAvailability = useMemo(() => {
+    const assignedGroups = new Map<string, string>();
+    mergeGroups.forEach((group) => {
+      group.taskIds.forEach((taskId) =>
+        assignedGroups.set(taskId, group.draftId),
+      );
+    });
+    return Object.fromEntries(
+      dataset.tasks.map((task) => {
+        const assignedGroupId = assignedGroups.get(task.id);
+        if (assignedGroupId && assignedGroupId !== activeMergeGroup.draftId) {
+          const groupNumber =
+            mergeGroups.findIndex(
+              (group) => group.draftId === assignedGroupId,
+            ) + 1;
+          return [
+            task.id,
+            {
+              disabled: true,
+              reason: `Already assigned to Merge ${groupNumber}.`,
+              assignedGroupId,
+            },
+          ];
+        }
+        if (
+          activeMergeGroup.taskIds.has(task.id) ||
+          activeMergeGroup.taskIds.size === 0
+        ) {
+          return [task.id, { disabled: false, reason: "", assignedGroupId }];
+        }
+        const reasons = mergeTaskCompatibilityIssues(dataset, [
+          ...activeMergeGroup.taskIds,
+          task.id,
+        ]);
+        return [
+          task.id,
+          {
+            disabled: reasons.length > 0,
+            reason: reasons[0] ?? "",
+            assignedGroupId,
+          },
+        ];
+      }),
+    ) as Record<
+      string,
+      { disabled: boolean; reason: string; assignedGroupId?: string }
+    >;
+  }, [activeMergeGroup, dataset, mergeGroups]);
 
   const toggleSetValue = (
     setValue: Dispatch<SetStateAction<Set<string>>>,
@@ -268,13 +374,55 @@ export function TransformPackageDialog({
     );
   };
 
-  const create = async () => {
+  const updateActiveMergeGroup = (
+    update: (group: MergeGroupDraft) => MergeGroupDraft,
+  ) => {
+    setMergeGroups((current) =>
+      current.map((group) =>
+        group.draftId === activeMergeGroup.draftId ? update(group) : group,
+      ),
+    );
+  };
+
+  const toggleMergeTask = (taskId: string, checked: boolean) => {
+    updateActiveMergeGroup((group) => {
+      const taskIds = new Set(group.taskIds);
+      if (checked) taskIds.add(taskId);
+      else taskIds.delete(taskId);
+      return { ...group, taskIds };
+    });
+  };
+
+  const addMergeGroup = () => {
+    mergeGroupCounter.current += 1;
+    const draftId = `merge-${mergeGroupCounter.current}`;
+    setMergeGroups((current) => [
+      ...current,
+      {
+        draftId,
+        taskIds: new Set<string>(),
+        mergedTaskName: `Combined ${dataset.tasks[0]?.fieldName ?? "task"} ${mergeGroupCounter.current}`,
+      },
+    ]);
+    setActiveMergeGroupId(draftId);
+  };
+
+  const removeActiveMergeGroup = () => {
+    if (mergeGroups.length === 1) return;
+    const remaining = mergeGroups.filter(
+      (group) => group.draftId !== activeMergeGroup.draftId,
+    );
+    setMergeGroups(remaining);
+    setActiveMergeGroupId(remaining[0].draftId);
+  };
+
+  const create = async (action: VariantCreationAction = "download") => {
     if (analysis.blockers.length || creating) return;
-    setCreating(true);
+    setCreatingAction(action);
     try {
-      await onCreate(plan);
+      await onCreate(plan, action);
     } finally {
-      setCreating(false);
+      setCreatingAction(undefined);
     }
   };
 
@@ -356,11 +504,48 @@ export function TransformPackageDialog({
                   </div>
                   <small>Unchecked content is removed from the variant</small>
                 </div>
+                {!!dataset.timeLogs.length && (
+                  <section
+                    className={`transform-executed-warning${executedDataChanged ? " active" : ""}`}
+                  >
+                    <AlertTriangle size={20} aria-hidden="true" />
+                    <div>
+                      <strong>Executed-data editing is unlocked</strong>
+                      <p>
+                        You may remove a complete time log or remap its DLV
+                        device-element references. Record bytes are preserved;
+                        individual executed channels cannot be removed because
+                        that would change sparse binary indexes.
+                      </p>
+                      {executedDataChanged && (
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={executedRiskAccepted}
+                            onChange={(event) =>
+                              setExecutedRiskAccepted(
+                                event.currentTarget.checked,
+                              )
+                            }
+                          />
+                          <span>
+                            I understand that the generated variant changes
+                            executed-data evidence and must be verified before
+                            downstream use.
+                          </span>
+                        </label>
+                      )}
+                    </div>
+                  </section>
+                )}
                 <div className="transform-task-list">
                   {dataset.tasks.map((task) => {
                     const taskKept = keptTaskIds.has(task.id);
                     const grids = dataset.grids.filter(
                       (grid) => grid.taskInstanceId === task.instanceId,
+                    );
+                    const timeLogs = dataset.timeLogs.filter(
+                      (timeLog) => timeLog.taskInstanceId === task.instanceId,
                     );
                     return (
                       <section className="transform-task" key={task.instanceId}>
@@ -382,7 +567,9 @@ export function TransformPackageDialog({
                               {task.id} · {task.fieldName ?? "No field"}
                             </small>
                           </span>
-                          <b>{grids.length} GRD</b>
+                          <b>
+                            {grids.length} GRD · {timeLogs.length} TLG
+                          </b>
                         </label>
                         {grids.map((grid) => {
                           const gridKept = taskKept && keptGridIds.has(grid.id);
@@ -495,6 +682,106 @@ export function TransformPackageDialog({
                                   </div>
                                 );
                               })}
+                            </div>
+                          );
+                        })}
+                        {timeLogs.map((timeLog) => {
+                          const timeLogKept =
+                            taskKept && keptTimeLogIds.has(timeLog.instanceId);
+                          return (
+                            <div
+                              className="transform-timelog"
+                              key={timeLog.instanceId}
+                            >
+                              <label className="transform-check-row timelog">
+                                <input
+                                  type="checkbox"
+                                  disabled={!taskKept}
+                                  checked={timeLogKept}
+                                  onChange={(event) =>
+                                    toggleSetValue(
+                                      setKeptTimeLogIds,
+                                      timeLog.instanceId,
+                                      event.currentTarget.checked,
+                                    )
+                                  }
+                                />
+                                <Route size={14} aria-hidden="true" />
+                                <span>
+                                  <strong>{timeLog.id}</strong>
+                                  <small>
+                                    {timeLog.decodedRecordCount.toLocaleString()}{" "}
+                                    records · {timeLog.headerFilename} ·{" "}
+                                    {timeLog.filename}
+                                  </small>
+                                </span>
+                                <b>{timeLog.channels.length} DDI</b>
+                              </label>
+                              {timeLogKept &&
+                                timeLog.channels.map((channel) => (
+                                  <div
+                                    className="transform-channel executed"
+                                    key={channel.channelId}
+                                  >
+                                    <div className="transform-executed-channel-label">
+                                      <span>
+                                        <strong>
+                                          DDI {channel.ddiDisplay} ·{" "}
+                                          {channel.ddiName}
+                                        </strong>
+                                        <small>
+                                          DLV {channel.dlvIndex + 1} ·{" "}
+                                          {channel.unit ?? "unit unknown"}
+                                        </small>
+                                      </span>
+                                    </div>
+                                    <label className="transform-det-select">
+                                      <span>DLV device element</span>
+                                      <select
+                                        value={
+                                          detAssignments[channel.channelId] ??
+                                          channel.deviceElementId ??
+                                          ""
+                                        }
+                                        onChange={(event) => {
+                                          const detId =
+                                            event.currentTarget.value;
+                                          setDetAssignments((current) => ({
+                                            ...current,
+                                            [channel.channelId]: detId,
+                                          }));
+                                        }}
+                                      >
+                                        <option value="">
+                                          No DET reference
+                                        </option>
+                                        {detObjects.map((det, detIndex) => (
+                                          <option
+                                            key={`${det.uid}:${detIndex}`}
+                                            value={det.id}
+                                          >
+                                            {det.id} ·{" "}
+                                            {det.attributes.D ??
+                                              det.attributes
+                                                .DeviceElementDesignator ??
+                                              "Unnamed device element"}
+                                          </option>
+                                        ))}
+                                        {newDeviceElements.map((det) => (
+                                          <option
+                                            key={det.draftId}
+                                            value={det.id}
+                                          >
+                                            {det.id} ·{" "}
+                                            {det.designator.trim() ||
+                                              "New device element"}{" "}
+                                            (new)
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                  </div>
+                                ))}
                             </div>
                           );
                         })}
@@ -705,36 +992,89 @@ export function TransformPackageDialog({
                 <div className="transform-section-heading">
                   <div>
                     <GitMerge size={14} />
-                    <span>Select tasks with aligned Type 2 grids</span>
+                    <span>Build independent compatible merge groups</span>
                   </div>
-                  <small>The first selection supplies the resulting IDs</small>
+                  <small>Unassigned tasks remain unchanged</small>
                 </div>
-                <label className="transform-merged-name">
-                  <span>Merged task name</span>
-                  <input
-                    value={mergedTaskName}
-                    maxLength={32}
-                    onChange={(event) =>
-                      setMergedTaskName(event.currentTarget.value)
-                    }
-                  />
-                </label>
+                <div
+                  className="transform-merge-groups"
+                  role="tablist"
+                  aria-label="Task merge groups"
+                >
+                  {mergeGroups.map((group, index) => (
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={group.draftId === activeMergeGroup.draftId}
+                      className={
+                        group.draftId === activeMergeGroup.draftId
+                          ? "active"
+                          : ""
+                      }
+                      onClick={() => setActiveMergeGroupId(group.draftId)}
+                      key={group.draftId}
+                    >
+                      <span>Merge {index + 1}</span>
+                      <b>
+                        {group.taskIds.size}{" "}
+                        {group.taskIds.size === 1 ? "task" : "tasks"}
+                      </b>
+                    </button>
+                  ))}
+                  <button type="button" className="add" onClick={addMergeGroup}>
+                    <Plus size={13} aria-hidden="true" /> New merge
+                  </button>
+                </div>
+                <div className="transform-merge-group-editor">
+                  <label className="transform-merged-name">
+                    <span>Merged task name</span>
+                    <input
+                      value={activeMergeGroup.mergedTaskName}
+                      maxLength={32}
+                      onChange={(event) => {
+                        const mergedTaskName = event.currentTarget.value;
+                        updateActiveMergeGroup((group) => ({
+                          ...group,
+                          mergedTaskName,
+                        }));
+                      }}
+                    />
+                  </label>
+                  {mergeGroups.length > 1 && (
+                    <button
+                      type="button"
+                      className="remove-merge-group"
+                      onClick={removeActiveMergeGroup}
+                    >
+                      <Trash2 size={13} aria-hidden="true" /> Remove group
+                    </button>
+                  )}
+                </div>
                 <div className="transform-merge-list">
                   {dataset.tasks.map((task) => {
                     const grids = dataset.grids.filter(
                       (grid) => grid.taskInstanceId === task.instanceId,
                     );
+                    const availability = mergeTaskAvailability[task.id];
+                    const checked = activeMergeGroup.taskIds.has(task.id);
+                    const assignedIndex = availability.assignedGroupId
+                      ? mergeGroups.findIndex(
+                          (group) =>
+                            group.draftId === availability.assignedGroupId,
+                        )
+                      : -1;
                     return (
                       <label
-                        className="transform-merge-task"
+                        className={`transform-merge-task${availability.disabled ? " disabled" : ""}`}
+                        title={availability.reason || undefined}
                         key={task.instanceId}
                       >
                         <input
                           type="checkbox"
-                          checked={mergeTaskIds.has(task.id)}
+                          checked={checked}
+                          disabled={availability.disabled}
                           onChange={(event) =>
-                            toggleSetValue(
-                              setMergeTaskIds,
+                            toggleMergeTask(
                               task.id,
                               event.currentTarget.checked,
                             )
@@ -748,7 +1088,15 @@ export function TransformPackageDialog({
                               ? `${grids[0].rows}×${grids[0].columns}, ${grids[0].channels.length} PDV`
                               : `${grids.length} grids`}
                           </small>
+                          {!!availability.reason && (
+                            <em>{availability.reason}</em>
+                          )}
                         </span>
+                        {assignedIndex >= 0 && (
+                          <b className="transform-merge-assignment">
+                            Merge {assignedIndex + 1}
+                          </b>
+                        )}
                       </label>
                     );
                   })}
@@ -759,7 +1107,8 @@ export function TransformPackageDialog({
                     Merge is allowed only when field/customer/farm, task status,
                     origin, dimensions, cell size, orientation, and decoded cell
                     count match. Different fields are blocked because one TSK
-                    can reference only one PFD.
+                    can reference only one PFD. After the first task is checked,
+                    incompatible choices are disabled with the blocking reason.
                   </p>
                 </div>
               </>
@@ -833,14 +1182,29 @@ export function TransformPackageDialog({
           >
             Cancel
           </button>
+          {mode === "cleanup" && (
+            <button
+              type="button"
+              className="transform-continue-button"
+              disabled={creating || Boolean(analysis.blockers.length)}
+              onClick={() => void create("continue-to-merge")}
+            >
+              <ArrowRight size={14} />
+              {creatingAction === "continue-to-merge"
+                ? "Applying cleanup…"
+                : "Apply & continue to merge"}
+            </button>
+          )}
           <button
             type="button"
             className="primary-button"
             disabled={creating || Boolean(analysis.blockers.length)}
-            onClick={() => void create()}
+            onClick={() => void create("download")}
           >
             <Sparkles size={14} />
-            {creating ? "Creating variant…" : "Create, download & preview"}
+            {creatingAction === "download"
+              ? "Creating variant…"
+              : "Create, download & preview"}
           </button>
         </footer>
       </section>
