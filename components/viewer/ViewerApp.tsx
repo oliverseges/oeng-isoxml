@@ -2,6 +2,7 @@
 
 import {
     createI18n,
+  detectPreferredLocale,
     type SupportedLocale,
 } from "@/lib/client/i18n";
 import {
@@ -95,7 +96,11 @@ export function ViewerApp() {
   const theme = useViewerStore((state) => state.theme);
   const toggleTheme = useViewerStore((state) => state.toggleTheme);
   const locale = useViewerStore((state) => state.locale);
+  const localePreferenceSource = useViewerStore(
+    (state) => state.localePreferenceSource,
+  );
   const setLocale = useViewerStore((state) => state.setLocale);
+  const setAutoLocale = useViewerStore((state) => state.setAutoLocale);
   const i18n = createI18n(locale);
   const [search, setSearch] = useState("");
   const [progress, setProgress] = useState<ImportProgress>();
@@ -258,6 +263,14 @@ export function ViewerApp() {
   useEffect(() => {
     document.documentElement.lang = locale;
   }, [locale]);
+
+  useEffect(() => {
+    if (localePreferenceSource !== "auto") return;
+    const detectedLocale = detectPreferredLocale();
+    if (detectedLocale !== locale) {
+      setAutoLocale(detectedLocale);
+    }
+  }, [locale, localePreferenceSource, setAutoLocale]);
 
   useEffect(() => {
     const compactLayout = window.matchMedia("(max-width: 840px)");

@@ -42,6 +42,7 @@ interface ViewerState {
   bottomHeight: number;
   baseLayer: "none" | "streets" | "satellite";
   locale: SupportedLocale;
+  localePreferenceSource: "auto" | "user";
   hideEmptyCells: boolean;
   hideOutliers: boolean;
   clipToField: boolean;
@@ -68,6 +69,7 @@ interface ViewerState {
   setPanelSize: (panel: "left" | "right" | "bottom", size: number) => void;
   setBaseLayer: (baseLayer: "none" | "streets" | "satellite") => void;
   setLocale: (locale: SupportedLocale) => void;
+  setAutoLocale: (locale: SupportedLocale) => void;
   setHideEmptyCells: (hideEmptyCells: boolean) => void;
   setHideOutliers: (hideOutliers: boolean) => void;
   setClipToField: (clipToField: boolean) => void;
@@ -98,6 +100,7 @@ export const useViewerStore = create<ViewerState>()(
         typeof window === "undefined"
           ? DEFAULT_LOCALE
           : detectPreferredLocale(),
+      localePreferenceSource: "auto",
       hideEmptyCells: true,
       hideOutliers: false,
       clipToField: false,
@@ -256,7 +259,14 @@ export const useViewerStore = create<ViewerState>()(
               : { bottomHeight: Math.min(420, Math.max(150, size)) },
         ),
       setBaseLayer: (baseLayer) => set({ baseLayer }),
-      setLocale: (locale) => set({ locale }),
+      setLocale: (locale) =>
+        set({ locale, localePreferenceSource: "user" }),
+      setAutoLocale: (locale) =>
+        set((state) =>
+          state.localePreferenceSource === "user"
+            ? state
+            : { locale, localePreferenceSource: "auto" },
+        ),
       setHideEmptyCells: (hideEmptyCells) => set({ hideEmptyCells }),
       setHideOutliers: (hideOutliers) => set({ hideOutliers }),
       setClipToField: (clipToField) => set({ clipToField }),
@@ -277,11 +287,23 @@ export const useViewerStore = create<ViewerState>()(
         bottomHeight: state.bottomHeight,
         baseLayer: state.baseLayer,
         locale: state.locale,
+        localePreferenceSource: state.localePreferenceSource,
         hideEmptyCells: state.hideEmptyCells,
         hideOutliers: state.hideOutliers,
         clipToField: state.clipToField,
         theme: state.theme,
       }),
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<ViewerState> | undefined;
+        if (!persisted) return currentState;
+        return {
+          ...currentState,
+          ...persisted,
+          localePreferenceSource:
+            persisted.localePreferenceSource ??
+            (persisted.locale ? "user" : currentState.localePreferenceSource),
+        };
+      },
     },
   ),
 );

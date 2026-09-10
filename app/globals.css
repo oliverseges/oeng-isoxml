@@ -698,6 +698,8 @@ a:focus-visible {
   display: grid;
   grid-template-rows: 54px 42px 35px minmax(0, 1fr) 28px;
   border-right: 1px solid var(--line);
+  container-name: dataset-navigator;
+  container-type: inline-size;
 }
 
 .left-panel.has-executed-filters {
@@ -1098,6 +1100,85 @@ a:focus-visible {
   font-family: var(--font-code);
   font-size: 8px;
   text-transform: uppercase;
+}
+
+@container dataset-navigator (max-width: 340px) {
+  .panel-heading small,
+  .dataset-search kbd,
+  .tree-meta,
+  .panel-footer span {
+    display: none;
+  }
+
+  .executed-filter-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tree-toolbar button,
+  .channel-quality-menu summary {
+    font-size: 0;
+    gap: 0;
+    justify-content: center;
+    min-width: 24px;
+    padding-inline: 5px;
+  }
+
+  .channel-quality-menu summary b {
+    font-size: 8px;
+    margin-left: 4px;
+  }
+
+  .tree-scope-filter select {
+    width: 72px;
+  }
+
+  .panel-reset-button span {
+    display: none;
+  }
+}
+
+@container dataset-navigator (max-width: 292px) {
+  .panel-heading {
+    padding-inline: 8px;
+  }
+
+  .panel-heading h2 {
+    font-size: 10px;
+  }
+
+  .panel-reset-button {
+    width: 26px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .tree-scope-filter {
+    min-width: 0;
+  }
+
+  .tree-scope-filter select {
+    width: 54px;
+    padding-inline: 4px 12px;
+  }
+
+  .executed-filter-row label {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .executed-filter-row label > svg {
+    display: none;
+  }
+}
+
+@container object-inspector (max-width: 339px) {
+  .inspector-heading small,
+  .inspector-heading span {
+    display: none;
+  }
+
+  .inspector-heading {
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+  }
 }
 
 .footer-dot {
