@@ -292,7 +292,7 @@ export function TimeLogMapWorkspace({
   channel,
 }: TimeLogMapWorkspaceProps) {
   const locale = useViewerStore((state) => state.locale);
-  const i18n = createI18n(locale);
+  const i18n = useMemo(() => createI18n(locale), [locale]);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | undefined>(undefined);
   const canvasRef = useRef<HTMLCanvasElement | undefined>(undefined);
