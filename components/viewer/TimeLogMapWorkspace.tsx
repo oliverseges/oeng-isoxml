@@ -829,6 +829,7 @@ export function TimeLogMapWorkspace({
       setHoveredRecordIndex(undefined);
       setHoverScreenPosition(undefined);
       pointHitBucketsRef.current.clear();
+      mapRef.current?.stop();
       tileLayerRef.current?.remove();
       tileLayerRef.current = undefined;
       canvasRef.current?.remove();

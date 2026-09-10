@@ -1061,8 +1061,10 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
       if (hoverFrame !== undefined) cancelAnimationFrame(hoverFrame);
       resizeObserver?.disconnect();
       mapReadyRef.current = false;
+      mapRef.current?.stop();
       tileLayerRef.current?.remove();
       tileLayerRef.current = undefined;
+      canvasRef.current?.remove();
       mapRef.current?.off();
       mapRef.current?.remove();
       mapRef.current = undefined;
