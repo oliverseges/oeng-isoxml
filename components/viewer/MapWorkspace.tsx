@@ -1,59 +1,59 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { copyTextToClipboard } from "@/lib/client/clipboard";
+import { createI18n, type I18n } from "@/lib/client/i18n";
+import { calculateDoseStatistics } from "@/lib/isoxml/dose-statistics";
+import { downloadBlob } from "@/lib/isoxml/export";
+import { buildMapChannelValues } from "@/lib/isoxml/map-channel-model";
+import {
+    geographicCellBounds,
+    geographicCellCenter,
+    geographicGridBounds,
+    gridCellAreaSquareMeters,
+    gridCellDimensionsMeters,
+    gridCellIndexAt,
+    gridCellRangeForBounds,
+    isSpatialGridValid,
+    pointIsInsideBoundary,
+} from "@/lib/isoxml/spatial";
+import type {
+    DecodedGrid,
+    GridChannel,
+    IsoXmlDataset,
+    SpatialBoundary,
+} from "@/lib/isoxml/types";
+import {
+    classIndexForValue,
+    classifyValues,
+    type ValueClassification,
+} from "@/lib/isoxml/value-classification";
+import { decodeValue } from "@/lib/isoxml/value-decoder";
 import type { Map as LeafletMap, TileLayer } from "leaflet";
 import {
-  AlertTriangle,
-  Check,
-  Crop,
-  Crosshair,
-  EyeOff,
-  Filter,
-  Layers,
-  LocateFixed,
-  MapPin,
-  Minus,
-  Plus,
-  Scan,
-  ScanLine,
-  SlidersHorizontal,
+    AlertTriangle,
+    Check,
+    Crop,
+    Crosshair,
+    EyeOff,
+    Filter,
+    Layers,
+    LocateFixed,
+    MapPin,
+    Minus,
+    Plus,
+    Scan,
+    ScanLine,
+    SlidersHorizontal,
 } from "lucide-react";
-import { decodeValue } from "@/lib/isoxml/value-decoder";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  geographicCellBounds,
-  geographicCellCenter,
-  geographicGridBounds,
-  gridCellAreaSquareMeters,
-  gridCellDimensionsMeters,
-  gridCellIndexAt,
-  gridCellRangeForBounds,
-  isSpatialGridValid,
-  pointIsInsideBoundary,
-} from "@/lib/isoxml/spatial";
-import { downloadBlob } from "@/lib/isoxml/export";
-import { copyTextToClipboard } from "@/lib/client/clipboard";
-import { buildMapChannelValues } from "@/lib/isoxml/map-channel-model";
-import { calculateDoseStatistics } from "@/lib/isoxml/dose-statistics";
-import {
-  classIndexForValue,
-  classifyValues,
-  type ValueClassification,
-} from "@/lib/isoxml/value-classification";
-import type {
-  DecodedGrid,
-  GridChannel,
-  IsoXmlDataset,
-  SpatialBoundary,
-} from "@/lib/isoxml/types";
-import { createI18n, type I18n } from "@/lib/client/i18n";
-import { useViewerStore } from "./store";
+    BASEMAP_ZOOM_OPTIONS,
+    MAP_MAX_ZOOM,
+    MAP_MIN_ZOOM,
+} from "./map-options";
 import { buildMapGridRaster, type MapGridRaster } from "./map-rendering";
 import { drawMapScreenshotTooltip } from "./map-screenshot";
-import {
-  BASEMAP_ZOOM_OPTIONS,
-  MAP_MAX_ZOOM,
-  MAP_MIN_ZOOM,
-} from "./map-options";
+import { useViewerStore } from "./store";
 
 const colorStops = [
   "#233f52",

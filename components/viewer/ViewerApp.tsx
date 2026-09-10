@@ -1,8 +1,8 @@
 "use client";
 
 import {
-  createI18n,
-  type SupportedLocale,
+    createI18n,
+    type SupportedLocale,
 } from "@/lib/client/i18n";
 import {
     downloadBlob,
@@ -20,12 +20,12 @@ import {
     loadSyntheticDemo,
     type ImportProgress,
 } from "@/lib/isoxml/import-client";
-import { importShapefileOverlayFiles } from "@/lib/isoxml/shapefile-import";
 import {
     createTransformedPackage,
     type PackageTransformPlan,
 } from "@/lib/isoxml/package-transform";
 import { datasetRepository } from "@/lib/isoxml/repository";
+import { importShapefileOverlayFiles } from "@/lib/isoxml/shapefile-import";
 import type { IsoXmlDataset } from "@/lib/isoxml/types";
 import {
     ChevronLeft,
@@ -481,7 +481,7 @@ export function ViewerApp() {
     if (!activeGrid || !activeChannel) return;
     setImportError(undefined);
     downloadText(
-      gridChannelCsv(activeGrid, activeChannel),
+      gridChannelCsv(activeGrid, activeChannel, locale),
       `${activeGrid.id}-${activeChannel.ddiDisplay}-${activeChannel.productId ?? "channel"}.csv`,
       "text/csv;charset=utf-8",
     );
@@ -524,7 +524,7 @@ export function ViewerApp() {
     if (!activeTimeLog || !activeTimeLogChannel) return;
     setImportError(undefined);
     downloadText(
-      timeLogChannelCsv(activeTimeLog, activeTimeLogChannel),
+      timeLogChannelCsv(activeTimeLog, activeTimeLogChannel, locale),
       `${activeTimeLog.id}-${activeTimeLogChannel.ddiDisplay}-${activeTimeLogChannel.deviceElementId ?? "channel"}.csv`,
       "text/csv;charset=utf-8",
     );

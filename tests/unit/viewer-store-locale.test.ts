@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
 import { useViewerStore } from "@/components/viewer/store";
+import { describe, expect, it } from "vitest";
 
 describe("viewer store locale", () => {
   it("defaults to English and updates the persisted locale preference", () => {

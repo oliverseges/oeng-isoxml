@@ -1,8 +1,8 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, Cpu, LoaderCircle } from "lucide-react";
 import { createI18n } from "@/lib/client/i18n";
 import type { DecodedTimeLog } from "@/lib/isoxml/types";
+import { AlertTriangle, CheckCircle2, Cpu, LoaderCircle } from "lucide-react";
 import { useViewerStore } from "./store";
 
 interface TimeLogAdapterControlProps {

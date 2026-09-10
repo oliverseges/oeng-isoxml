@@ -419,8 +419,13 @@ test("imports a zipped shapefile as a boundary overlay on the current dataset", 
     page.getByRole("treeitem", { name: /DDI 0001 · AcidLine S/i }),
   ).toBeVisible();
 
-  await page.locator('input[type="file"]').first().setInputFiles([shapefileZip]);
-  const boundaryOverlay = page.getByRole("treeitem", { name: /Overlay boundary.*points/i });
+  await page
+    .locator('input[type="file"]')
+    .first()
+    .setInputFiles([shapefileZip]);
+  const boundaryOverlay = page.getByRole("treeitem", {
+    name: /Overlay boundary.*points/i,
+  });
   await expect(boundaryOverlay).toBeVisible();
   await boundaryOverlay.click();
   await expect(boundaryOverlay).toHaveAttribute("aria-selected", "true");
@@ -444,11 +449,12 @@ test("imports loose shapefile sidecar files as a boundary overlay", async ({
     page.getByRole("treeitem", { name: /DDI 0001 · AcidLine S/i }),
   ).toBeVisible();
 
-  await page.locator('input[type="file"]').first().setInputFiles(shapefileParts);
+  await page
+    .locator('input[type="file"]')
+    .first()
+    .setInputFiles(shapefileParts);
   await page.getByRole("tab", { name: /Files/i }).click();
-  await expect(
-    page.getByText("overlay-boundary.zip").first(),
-  ).toBeVisible();
+  await expect(page.getByText("overlay-boundary.zip").first()).toBeVisible();
 });
 
 test("opens both workspace drawers at a narrow viewport", async ({ page }) => {

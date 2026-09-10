@@ -1,24 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  AlertTriangle,
-  ArrowLeft,
-  ArrowRight,
-  Braces,
-  CheckCircle2,
-  Clock3,
-  Link2,
-  MapPin,
-} from "lucide-react";
 import { createI18n } from "@/lib/client/i18n";
-import { decodeValue } from "@/lib/isoxml/value-decoder";
 import type {
-  DecodedTimeLog,
-  IsoXmlDataset,
-  IsoXmlObject,
-  TimeLogChannel,
+    DecodedTimeLog,
+    IsoXmlDataset,
+    IsoXmlObject,
+    TimeLogChannel,
 } from "@/lib/isoxml/types";
+import { decodeValue } from "@/lib/isoxml/value-decoder";
+import {
+    AlertTriangle,
+    ArrowLeft,
+    ArrowRight,
+    Braces,
+    CheckCircle2,
+    Clock3,
+    Link2,
+    MapPin,
+} from "lucide-react";
+import { useEffect, useState } from "react";
 import { TIME_LOG_INSPECTOR_TABS } from "./inspector-tabs";
 import { useViewerStore } from "./store";
 import { TimeLogAdapterControl } from "./TimeLogAdapterControl";

@@ -1,28 +1,28 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import {
-  AlertTriangle,
-  ArrowLeft,
-  ArrowRight,
-  Braces,
-  CheckCircle2,
-  Clipboard,
-  ExternalLink,
-  Link2,
-  MapPin,
-} from "lucide-react";
-import type { DdiDefinition } from "@/lib/isoxml/ddi-catalog";
 import { copyTextToClipboard } from "@/lib/client/clipboard";
 import { createI18n } from "@/lib/client/i18n";
+import type { DdiDefinition } from "@/lib/isoxml/ddi-catalog";
 import { basename } from "@/lib/isoxml/file-loader";
-import { decodeValue } from "@/lib/isoxml/value-decoder";
 import type {
-  DecodedGrid,
-  GridChannel,
-  IsoXmlDataset,
-  IsoXmlObject,
+    DecodedGrid,
+    GridChannel,
+    IsoXmlDataset,
+    IsoXmlObject,
 } from "@/lib/isoxml/types";
+import { decodeValue } from "@/lib/isoxml/value-decoder";
+import {
+    AlertTriangle,
+    ArrowLeft,
+    ArrowRight,
+    Braces,
+    CheckCircle2,
+    Clipboard,
+    ExternalLink,
+    Link2,
+    MapPin,
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { INSPECTOR_TABS, visibleInspectorTab } from "./inspector-tabs";
 import { useViewerStore } from "./store";
 

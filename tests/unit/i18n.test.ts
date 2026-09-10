@@ -1,5 +1,9 @@
+import {
+  createI18n,
+  detectPreferredLocale,
+  SUPPORTED_LOCALES,
+} from "@/lib/client/i18n";
 import { describe, expect, it } from "vitest";
-import { createI18n, SUPPORTED_LOCALES } from "@/lib/client/i18n";
 
 describe("client i18n", () => {
   it("exposes the configured locale options", () => {
@@ -37,5 +41,11 @@ describe("client i18n", () => {
     );
     expect(de.formatTime(instant, { timeZone: "UTC" })).toContain("13:05");
     expect(en.formatDateTime(instant)).toContain("2026");
+  });
+
+  it("detects the preferred locale from browser language candidates", () => {
+    expect(detectPreferredLocale(["sv-SE", "en-US"])).toBe("sv");
+    expect(detectPreferredLocale(["fr-FR", "de-DE"])).toBe("de");
+    expect(detectPreferredLocale(["fr-FR"])).toBe("en");
   });
 });

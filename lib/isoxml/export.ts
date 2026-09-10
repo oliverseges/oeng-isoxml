@@ -1,4 +1,5 @@
 import { zip as zipShapefile } from "@mapbox/shp-write";
+import { createI18n, DEFAULT_LOCALE, type SupportedLocale } from "../client/i18n";
 import { geographicCellBounds, geographicCellCenter } from "./spatial";
 import type {
   DecodedGrid,
@@ -44,27 +45,29 @@ function timeLogChannelIndexFor(
 export function gridChannelCsv(
   grid: DecodedGrid,
   channel: GridChannel,
+  locale: SupportedLocale = DEFAULT_LOCALE,
 ): string {
+  const i18n = createI18n(locale);
   const channelIndex = channelIndexFor(grid, channel);
   const rows = [
     [
-      "task_id",
-      "grid_id",
-      "source_file",
-      "cell_index",
-      "row",
-      "column",
-      "latitude",
-      "longitude",
-      "treatment_zone",
-      "pdv_index",
+      i18n.t("Task ID"),
+      i18n.t("Grid ID"),
+      i18n.t("Source file"),
+      i18n.t("Cell index"),
+      i18n.t("Row"),
+      i18n.t("Column"),
+      i18n.t("Latitude"),
+      i18n.t("Longitude"),
+      i18n.t("Treatment zone"),
+      i18n.t("PDV index"),
       "ddi",
-      "product",
-      "device_element",
-      "raw_value",
-      "scaled_value",
-      "unit",
-      "derived",
+      i18n.t("Product"),
+      i18n.t("Device element"),
+      i18n.t("Raw value"),
+      i18n.t("Scaled value"),
+      i18n.t("Unit"),
+      i18n.t("Derived"),
     ],
   ];
   for (let index = 0; index < grid.decodedCellCount; index += 1) {
@@ -101,27 +104,29 @@ export function gridChannelCsv(
 export function timeLogChannelCsv(
   timeLog: DecodedTimeLog,
   channel: TimeLogChannel,
+  locale: SupportedLocale = DEFAULT_LOCALE,
 ): string {
+  const i18n = createI18n(locale);
   const channelIndex = timeLogChannelIndexFor(timeLog, channel);
   const rows: unknown[][] = [
     [
-      "task_id",
-      "time_log_id",
-      "source_file",
-      "record_index",
-      "timestamp",
-      "latitude",
-      "longitude",
-      "position_status",
-      "position_valid",
-      "dlv_index",
+      i18n.t("Task ID"),
+      i18n.t("Time-log ID"),
+      i18n.t("Source file"),
+      i18n.t("Record index"),
+      i18n.t("Timestamp"),
+      i18n.t("Latitude"),
+      i18n.t("Longitude"),
+      i18n.t("Position status"),
+      i18n.t("Position valid"),
+      i18n.t("DLV index"),
       "ddi",
-      "machine",
-      "device_element",
-      "value_present",
-      "raw_value",
-      "scaled_value",
-      "unit",
+      i18n.t("Machine"),
+      i18n.t("Device element"),
+      i18n.t("Value present"),
+      i18n.t("Raw value"),
+      i18n.t("Scaled value"),
+      i18n.t("Unit"),
     ],
   ];
   for (let index = 0; index < timeLog.decodedRecordCount; index += 1) {

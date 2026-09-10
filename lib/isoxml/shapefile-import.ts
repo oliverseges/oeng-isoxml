@@ -173,8 +173,14 @@ async function zipLooseShapefileParts(
 
   if (grouped.size !== 1) return undefined;
   const [stem, components] = [...grouped.entries()][0];
-  const names = new Set(components.map((file) => basename(file.name).toLowerCase()));
-  if (!names.has(`${stem}.shp`) || !names.has(`${stem}.dbf`) || !names.has(`${stem}.shx`)) {
+  const names = new Set(
+    components.map((file) => basename(file.name).toLowerCase()),
+  );
+  if (
+    !names.has(`${stem}.shp`) ||
+    !names.has(`${stem}.dbf`) ||
+    !names.has(`${stem}.shx`)
+  ) {
     return undefined;
   }
 
@@ -212,8 +218,12 @@ export async function importShapefileOverlay(
     return undefined;
   }
 
-  const archiveEntries = Object.values(archive.files).filter((entry) => !entry.dir);
-  if (!archiveEntries.some((entry) => entry.name.toLowerCase().endsWith(".shp"))) {
+  const archiveEntries = Object.values(archive.files).filter(
+    (entry) => !entry.dir,
+  );
+  if (
+    !archiveEntries.some((entry) => entry.name.toLowerCase().endsWith(".shp"))
+  ) {
     return undefined;
   }
 
@@ -225,11 +235,11 @@ export async function importShapefileOverlay(
 
   const { default: shp } = await import("shpjs");
   const parsed = (await shp(sourceArrayBuffer(bytes))) as
-    | ParsedShapefileCollection
-    | ParsedShapefileCollection[];
+    ParsedShapefileCollection | ParsedShapefileCollection[];
   const collections = Array.isArray(parsed) ? parsed : [parsed];
   const overlayKey = `shape:${crypto.randomUUID()}:${basename(filename)}`;
-  const fallbackName = basename(filename).replace(/\.zip$/i, "") || "Imported boundary";
+  const fallbackName =
+    basename(filename).replace(/\.zip$/i, "") || "Imported boundary";
 
   let selectedBoundary: SpatialBoundary | undefined;
   let ignoredPolygonFeatures = 0;
@@ -240,7 +250,9 @@ export async function importShapefileOverlay(
     collection.features.forEach((feature, featureIndex) => {
       const candidate = boundaryFromFeature(
         feature,
-        namedProperty(feature.properties) ?? collection.fileName ?? fallbackName,
+        namedProperty(feature.properties) ??
+          collection.fileName ??
+          fallbackName,
         taskId,
         `${overlayKey}:${collectionIndex}`,
         featureIndex,
@@ -334,7 +346,12 @@ export async function importShapefileOverlayFiles(
   if (!files.length) return undefined;
 
   if (files.length === 1) {
-    return importShapefileOverlay(dataset, files[0].name, files[0].bytes, taskId);
+    return importShapefileOverlay(
+      dataset,
+      files[0].name,
+      files[0].bytes,
+      taskId,
+    );
   }
 
   const zipped = await zipLooseShapefileParts(files);

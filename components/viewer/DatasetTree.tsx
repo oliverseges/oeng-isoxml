@@ -1,57 +1,57 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { createI18n } from "@/lib/client/i18n";
 import {
-  AlertTriangle,
-  Box,
-  Building2,
-  ChevronDown,
-  ChevronRight,
-  Database,
-  Eye,
-  FileArchive,
-  FileCode2,
-  FilterX,
-  Grid3X3,
-  Info,
-  Layers3,
-  ListFilter,
-  Map as MapIcon,
-  Route,
-  Search,
-  SearchX,
-  SlidersHorizontal,
-  Sprout,
-  Tractor,
-  Warehouse,
-} from "lucide-react";
-import {
-  OPERATION_GROUPS,
-  operationGroupsForChannel,
-  type OperationGroupId,
+    OPERATION_GROUPS,
+    operationGroupsForChannel,
+    type OperationGroupId,
 } from "@/lib/isoxml/operation-groups";
 import {
-  hasExecutedChannelQualityFilters,
-  passesExecutedChannelQualityFilters,
-  SHOW_ALL_CHANNEL_FILTERS,
-  summarizeTimeLogChannel,
-  USEFUL_CHANNEL_FILTERS,
-  type ExecutedChannelQualityFilters,
-  type TimeLogChannelMetrics,
+    hasExecutedChannelQualityFilters,
+    passesExecutedChannelQualityFilters,
+    SHOW_ALL_CHANNEL_FILTERS,
+    summarizeTimeLogChannel,
+    USEFUL_CHANNEL_FILTERS,
+    type ExecutedChannelQualityFilters,
+    type TimeLogChannelMetrics,
 } from "@/lib/isoxml/timelog-channel-quality";
 import type { IsoXmlDataset, IsoXmlObject } from "@/lib/isoxml/types";
-import { createI18n } from "@/lib/client/i18n";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import {
+    AlertTriangle,
+    Box,
+    Building2,
+    ChevronDown,
+    ChevronRight,
+    Database,
+    Eye,
+    FileArchive,
+    FileCode2,
+    FilterX,
+    Grid3X3,
+    Info,
+    Layers3,
+    ListFilter,
+    Map as MapIcon,
+    Route,
+    Search,
+    SearchX,
+    SlidersHorizontal,
+    Sprout,
+    Tractor,
+    Warehouse,
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useViewerStore } from "./store";
 import {
-  emptyExecutedContainerIds,
-  executedChannelTreeLabel,
-  isTreeChannelActive,
-  isTreeNodeInDataScope,
-  toggleCollapsedTreeNodeId,
-  treeContainerNeedsActivation,
-  treeNodeTogglesChildrenOnClick,
-  type TreeDataScope,
+    emptyExecutedContainerIds,
+    executedChannelTreeLabel,
+    isTreeChannelActive,
+    isTreeNodeInDataScope,
+    toggleCollapsedTreeNodeId,
+    treeContainerNeedsActivation,
+    treeNodeTogglesChildrenOnClick,
+    type TreeDataScope,
 } from "./tree-selection";
 
 type TreeNode = {

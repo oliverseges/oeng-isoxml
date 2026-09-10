@@ -1,10 +1,14 @@
 "use client";
 
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
-import { DEFAULT_LOCALE, type SupportedLocale } from "@/lib/client/i18n";
+import {
+  DEFAULT_LOCALE,
+  detectPreferredLocale,
+  type SupportedLocale,
+} from "@/lib/client/i18n";
 import { datasetRepository } from "@/lib/isoxml/repository";
 import type { IsoXmlDataset } from "@/lib/isoxml/types";
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 export type BottomTab = "cells" | "files" | "issues" | "source";
 export type InspectorTab =
@@ -52,10 +56,7 @@ interface ViewerState {
     channelId: string,
   ) => void;
   setActiveTimeLog: (timeLogInstanceId: string) => void;
-  setActiveBoundary: (
-    boundaryId: string | undefined,
-    taskId?: string,
-  ) => void;
+  setActiveBoundary: (boundaryId: string | undefined, taskId?: string) => void;
   setSelectedCell: (cellIndex: number | undefined) => void;
   setHoveredCell: (cellIndex: number | undefined) => void;
   setBottomTab: (tab: BottomTab) => void;
@@ -93,7 +94,8 @@ export const useViewerStore = create<ViewerState>()(
       rightWidth: 344,
       bottomHeight: 212,
       baseLayer: "none",
-      locale: DEFAULT_LOCALE,
+      locale:
+        typeof window === "undefined" ? DEFAULT_LOCALE : detectPreferredLocale(),
       hideEmptyCells: true,
       hideOutliers: false,
       clipToField: false,

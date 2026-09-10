@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
-import { createI18n, SUPPORTED_LOCALES, type SupportedLocale } from "@/lib/client/i18n";
 import { useViewerStore } from "@/components/viewer/store";
+import { createI18n, SUPPORTED_LOCALES, type SupportedLocale } from "@/lib/client/i18n";
+import Link from "next/link";
 
 export default function SettingsPage() {
   const locale = useViewerStore((state) => state.locale);

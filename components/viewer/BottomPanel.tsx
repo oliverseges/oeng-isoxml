@@ -1,29 +1,30 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { copyTextToClipboard } from "@/lib/client/clipboard";
+import { createI18n } from "@/lib/client/i18n";
+import { localizeIssue } from "@/lib/client/issue-i18n";
+import type {
+    DecodedGrid,
+    DecodedTimeLog,
+    GridChannel,
+    IsoXmlDataset,
+    TimeLogChannel,
+} from "@/lib/isoxml/types";
+import { decodeValue } from "@/lib/isoxml/value-decoder";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
-  AlertCircle,
-  Binary,
-  Braces,
-  ChevronDown,
-  CircleX,
-  Copy,
-  FileStack,
-  Grid3X3,
-  Info,
-  TriangleAlert,
+    AlertCircle,
+    Binary,
+    Braces,
+    ChevronDown,
+    CircleX,
+    Copy,
+    FileStack,
+    Grid3X3,
+    Info,
+    TriangleAlert,
 } from "lucide-react";
-import { decodeValue } from "@/lib/isoxml/value-decoder";
-import type {
-  DecodedGrid,
-  DecodedTimeLog,
-  GridChannel,
-  IsoXmlDataset,
-  TimeLogChannel,
-} from "@/lib/isoxml/types";
-import { createI18n } from "@/lib/client/i18n";
-import { copyTextToClipboard } from "@/lib/client/clipboard";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useViewerStore, type BottomTab } from "./store";
 
 const tabs: Array<{ id: BottomTab; label: string; icon: typeof Grid3X3 }> = [
@@ -406,6 +407,7 @@ export function BottomPanel({
                 const issueKey = `${issue.id}:${issueIndex}`;
                 const expanded = expandedIssueId === issueKey;
                 const SeverityIcon = severityIcon[issue.severity];
+                const localizedIssue = localizeIssue(issue, i18n);
                 return (
                   <div className="issue-record" key={issueKey}>
                     <button
@@ -422,7 +424,7 @@ export function BottomPanel({
                         {i18n.t(issue.severity)}
                       </span>
                       <code>{issue.code}</code>
-                      <span>{issue.message}</span>
+                      <span>{localizedIssue.message}</span>
                       <span>
                         {issue.filename ?? issue.objectId ?? i18n.t("dataset")}
                       </span>
@@ -434,11 +436,11 @@ export function BottomPanel({
                       <div className="issue-detail">
                         <div>
                           <small>{i18n.t("What this means").toUpperCase()}</small>
-                          <p>{issue.explanation}</p>
+                          <p>{localizedIssue.explanation}</p>
                         </div>
                         <div>
                           <small>{i18n.t("Suggested action").toUpperCase()}</small>
-                          <p>{issue.suggestedAction}</p>
+                          <p>{localizedIssue.suggestedAction}</p>
                         </div>
                         <dl>
                           <div>

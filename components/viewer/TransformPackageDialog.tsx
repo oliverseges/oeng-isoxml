@@ -1,38 +1,38 @@
 "use client";
 
-import {
-  type Dispatch,
-  type SetStateAction,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import {
-  AlertTriangle,
-  ArrowRight,
-  CheckCircle2,
-  GitMerge,
-  Layers3,
-  PackageCheck,
-  Plus,
-  Route,
-  ShieldCheck,
-  Sparkles,
-  Trash2,
-  Wrench,
-  X,
-} from "lucide-react";
 import { createI18n } from "@/lib/client/i18n";
 import {
-  analyzePackageTransform,
-  mergeTaskCompatibilityIssues,
-  type CleanupTransformPlan,
-  type MergeTransformPlan,
-  type NewDeviceElementSpec,
-  type PackageTransformPlan,
+    analyzePackageTransform,
+    mergeTaskCompatibilityIssues,
+    type CleanupTransformPlan,
+    type MergeTransformPlan,
+    type NewDeviceElementSpec,
+    type PackageTransformPlan,
 } from "@/lib/isoxml/package-transform";
 import type { IsoXmlDataset } from "@/lib/isoxml/types";
+import {
+    AlertTriangle,
+    ArrowRight,
+    CheckCircle2,
+    GitMerge,
+    Layers3,
+    PackageCheck,
+    Plus,
+    Route,
+    ShieldCheck,
+    Sparkles,
+    Trash2,
+    Wrench,
+    X,
+} from "lucide-react";
+import {
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type Dispatch,
+    type SetStateAction,
+} from "react";
 import { useViewerStore } from "./store";
 
 interface TransformPackageDialogProps {

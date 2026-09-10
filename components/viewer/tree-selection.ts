@@ -36,10 +36,13 @@ export function treeContainerNeedsActivation(
   );
 }
 
-export function executedChannelTreeLabel(channel: {
-  ddiDisplay: string;
-  ddiName?: string;
-}, unknownDdiLabel = "Unknown DDI"): string {
+export function executedChannelTreeLabel(
+  channel: {
+    ddiDisplay: string;
+    ddiName?: string;
+  },
+  unknownDdiLabel = "Unknown DDI",
+): string {
   const ddiName = channel.ddiName?.trim() || unknownDdiLabel;
   return `DDI ${channel.ddiDisplay} · ${ddiName}`;
 }

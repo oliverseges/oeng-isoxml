@@ -1,6 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { copyTextToClipboard } from "@/lib/client/clipboard";
+import { createI18n, type I18n } from "@/lib/client/i18n";
+import { downloadBlob } from "@/lib/isoxml/export";
+import { extremeOutlierBounds } from "@/lib/isoxml/outliers";
+import { buildExecutedMapExcludedMask } from "@/lib/isoxml/time-log-map-filters";
+import type {
+  DecodedTimeLog,
+  IsoXmlDataset,
+  SpatialBoundary,
+  TimeLogChannel,
+} from "@/lib/isoxml/types";
+import {
+  classIndexForValue,
+  classifyValues,
+} from "@/lib/isoxml/value-classification";
+import { decodeValue } from "@/lib/isoxml/value-decoder";
 import type { Map as LeafletMap, TileLayer } from "leaflet";
 import {
   AlertTriangle,
@@ -18,28 +33,7 @@ import {
   Scan,
   SlidersHorizontal,
 } from "lucide-react";
-import { copyTextToClipboard } from "@/lib/client/clipboard";
-import { downloadBlob } from "@/lib/isoxml/export";
-import { decodeValue } from "@/lib/isoxml/value-decoder";
-import { extremeOutlierBounds } from "@/lib/isoxml/outliers";
-import { buildExecutedMapExcludedMask } from "@/lib/isoxml/time-log-map-filters";
-import {
-  classIndexForValue,
-  classifyValues,
-} from "@/lib/isoxml/value-classification";
-import type {
-  DecodedTimeLog,
-  IsoXmlDataset,
-  SpatialBoundary,
-  TimeLogChannel,
-} from "@/lib/isoxml/types";
-import { createI18n, type I18n } from "@/lib/client/i18n";
-import { useViewerStore } from "./store";
-import {
-  BASEMAP_ZOOM_OPTIONS,
-  MAP_MAX_ZOOM,
-  MAP_MIN_ZOOM,
-} from "./map-options";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   addMapPointHitTarget,
   displayedMapRecordIndex,
@@ -47,10 +41,16 @@ import {
   type MapPointHitBuckets,
 } from "./map-hit-testing";
 import {
+  BASEMAP_ZOOM_OPTIONS,
+  MAP_MAX_ZOOM,
+  MAP_MIN_ZOOM,
+} from "./map-options";
+import {
   timeLogPointRenderStyle,
   webMercatorWorldPixel,
 } from "./map-rendering";
 import { drawMapScreenshotTooltip } from "./map-screenshot";
+import { useViewerStore } from "./store";
 
 const colorStops = [
   "#176b48",

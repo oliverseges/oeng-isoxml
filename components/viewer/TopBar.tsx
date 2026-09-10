@@ -7,16 +7,17 @@ import {
 } from "@/lib/client/i18n";
 import type { IsoXmlDataset } from "@/lib/isoxml/types";
 import {
-    Check,
-    ChevronDown,
-    Download,
-    Import,
-    Moon,
-    ShieldAlert,
-    ShieldCheck,
-    Sparkles,
-    Sun,
-    Trash2,
+  Check,
+  ChevronDown,
+  Download,
+  Import,
+  Languages,
+  Moon,
+  ShieldAlert,
+  ShieldCheck,
+  Sparkles,
+  Sun,
+  Trash2,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -233,19 +234,23 @@ export function TopBar({
       <div className="topbar-actions">
         <label className="topbar-locale-select">
           <span>{i18n.t("Language")}</span>
-          <select
-            value={locale}
-            aria-label={i18n.t("Choose interface language")}
-            onChange={(event) =>
-              onLocaleChange(event.currentTarget.value as SupportedLocale)
-            }
-          >
-            {SUPPORTED_LOCALES.map((option) => (
-              <option key={option.code} value={option.code}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          <div className="topbar-locale-field">
+            <Languages size={13} aria-hidden="true" />
+            <select
+              value={locale}
+              aria-label={i18n.t("Choose interface language")}
+              onChange={(event) =>
+                onLocaleChange(event.currentTarget.value as SupportedLocale)
+              }
+            >
+              {SUPPORTED_LOCALES.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={13} aria-hidden="true" />
+          </div>
         </label>
         <button
           type="button"

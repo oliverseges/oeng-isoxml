@@ -1,18 +1,17 @@
-import { zip as zipShapefile } from "@mapbox/shp-write";
 import {
   gridChannelCsv,
   gridChannelGeoJson,
   gridChannelShapefileZip,
 } from "@/lib/isoxml/export";
 import {
-  importShapefileOverlay,
-  importShapefileOverlayFiles,
-} from "@/lib/isoxml/shapefile-import";
-import {
   analyzePackageTransform,
   mergeTaskCompatibilityIssues,
 } from "@/lib/isoxml/package-transform";
 import { buildDataset } from "@/lib/isoxml/pipeline";
+import {
+  importShapefileOverlay,
+  importShapefileOverlayFiles,
+} from "@/lib/isoxml/shapefile-import";
 import {
   gridCellAreaSquareMeters,
   gridCellDimensionsMeters,
@@ -20,6 +19,7 @@ import {
 } from "@/lib/isoxml/spatial";
 import type { IsoXmlDataset, ValidationIssue } from "@/lib/isoxml/types";
 import { decodeValue } from "@/lib/isoxml/value-decoder";
+import { zip as zipShapefile } from "@mapbox/shp-write";
 import fc from "fast-check";
 import JSZip from "jszip";
 import { readFile } from "node:fs/promises";
@@ -184,6 +184,7 @@ describe("synthetic multi-PDV Type 2 vertical slice", () => {
     const grid = dataset.grids[0];
     const channel = grid.channels[0];
     const csv = gridChannelCsv(grid, channel);
+    const germanCsv = gridChannelCsv(grid, channel, "de");
     const geoJson = JSON.parse(gridChannelGeoJson(dataset, grid, channel));
     const shapefileZip = await JSZip.loadAsync(
       await (
@@ -192,6 +193,8 @@ describe("synthetic multi-PDV Type 2 vertical slice", () => {
     );
 
     expect(csv.split("\r\n")).toHaveLength(grid.decodedCellCount + 1);
+    expect(germanCsv.split("\r\n")[0]).toContain("Aufgaben-ID");
+    expect(germanCsv.split("\r\n")[0]).toContain("Quelldatei");
     expect(geoJson.features).toHaveLength(grid.decodedCellCount);
     expect(geoJson.type).toBe("FeatureCollection");
     expect(geoJson.features[0].geometry.coordinates[0][0][1]).toBeLessThan(

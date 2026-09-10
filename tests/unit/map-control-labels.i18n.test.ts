@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
 import { executedOutlierControlLabel } from "@/components/viewer/map-control-labels";
+import { describe, expect, it } from "vitest";
 
 describe("localized map control labels", () => {
   it("formats the executed outlier label in the selected locale", () => {
