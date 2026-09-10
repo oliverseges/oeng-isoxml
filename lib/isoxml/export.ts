@@ -1,5 +1,9 @@
 import { zip as zipShapefile } from "@mapbox/shp-write";
-import { createI18n, DEFAULT_LOCALE, type SupportedLocale } from "../client/i18n";
+import {
+  createI18n,
+  DEFAULT_LOCALE,
+  type SupportedLocale,
+} from "../client/i18n";
 import { geographicCellBounds, geographicCellCenter } from "./spatial";
 import type {
   DecodedGrid,

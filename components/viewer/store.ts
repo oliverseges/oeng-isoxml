@@ -95,7 +95,9 @@ export const useViewerStore = create<ViewerState>()(
       bottomHeight: 212,
       baseLayer: "none",
       locale:
-        typeof window === "undefined" ? DEFAULT_LOCALE : detectPreferredLocale(),
+        typeof window === "undefined"
+          ? DEFAULT_LOCALE
+          : detectPreferredLocale(),
       hideEmptyCells: true,
       hideOutliers: false,
       clipToField: false,

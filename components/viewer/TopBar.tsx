@@ -1,23 +1,23 @@
 "use client";
 
 import {
-  createI18n,
-  SUPPORTED_LOCALES,
-  type SupportedLocale,
+    createI18n,
+    SUPPORTED_LOCALES,
+    type SupportedLocale,
 } from "@/lib/client/i18n";
 import type { IsoXmlDataset } from "@/lib/isoxml/types";
 import {
-  Check,
-  ChevronDown,
-  Download,
-  Import,
-  Languages,
-  Moon,
-  ShieldAlert,
-  ShieldCheck,
-  Sparkles,
-  Sun,
-  Trash2,
+    Check,
+    ChevronDown,
+    Download,
+    Import,
+    Languages,
+    Moon,
+    ShieldAlert,
+    ShieldCheck,
+    Sparkles,
+    Sun,
+    Trash2,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 

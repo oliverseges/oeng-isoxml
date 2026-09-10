@@ -20,7 +20,8 @@ export function localizeIssue(
   switch (issue.code) {
     case "PACKAGE_DUPLICATE_FILE": {
       const count = matchNumber(/occurs (\d+) times/i, issue.message) ?? 0;
-      const path = issue.filename?.toUpperCase() ?? issue.message.split(" occurs ")[0];
+      const path =
+        issue.filename?.toUpperCase() ?? issue.message.split(" occurs ")[0];
       return {
         message: i18n.t("{path} occurs {count} times", { path, count }),
         explanation: i18n.t(
@@ -33,15 +34,24 @@ export function localizeIssue(
       const count = matchNumber(/^(\d+) TASKDATA\.XML/i, issue.message) ?? 0;
       return {
         message: i18n.t("{count} TASKDATA.XML files were found", { count }),
-        explanation: i18n.t("All are preserved; the first is used as the primary document."),
-        suggestedAction: i18n.t("Import one complete task-data package at a time."),
+        explanation: i18n.t(
+          "All are preserved; the first is used as the primary document.",
+        ),
+        suggestedAction: i18n.t(
+          "Import one complete task-data package at a time.",
+        ),
       };
     }
     case "PACKAGE_UNCONVENTIONAL_TASKDATA_NAME": {
       const filename = basename(issue.filename ?? "TASKDATA.XML");
       return {
-        message: i18n.t("{filename} contains task data but has a nonstandard filename", { filename }),
-        explanation: i18n.t("The ISO11783_TaskData root element was detected from the file contents."),
+        message: i18n.t(
+          "{filename} contains task data but has a nonstandard filename",
+          { filename },
+        ),
+        explanation: i18n.t(
+          "The ISO11783_TaskData root element was detected from the file contents.",
+        ),
         suggestedAction: i18n.t("Use the conventional TASKDATA.XML filename."),
       };
     }
@@ -51,7 +61,9 @@ export function localizeIssue(
           filename: issue.filename ?? i18n.t("XML source"),
         }),
         explanation: issue.explanation,
-        suggestedAction: i18n.t("Repair the XML or remove unsafe declarations."),
+        suggestedAction: i18n.t(
+          "Repair the XML or remove unsafe declarations.",
+        ),
       };
     case "XML_INVALID_ROOT":
       return {
@@ -79,7 +91,9 @@ export function localizeIssue(
         explanation: i18n.t(
           "The raw reference is preserved, but the related object cannot be shown.",
         ),
-        suggestedAction: i18n.t("Include the referenced object or correct the ID."),
+        suggestedAction: i18n.t(
+          "Include the referenced object or correct the ID.",
+        ),
       };
     default:
       return {
