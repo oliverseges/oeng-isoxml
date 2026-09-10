@@ -46,6 +46,7 @@ interface ViewerState {
   hideEmptyCells: boolean;
   hideOutliers: boolean;
   clipToField: boolean;
+  clipToFieldPreferenceSource: "auto" | "user";
   mapFitNonce: number;
   theme: "dark" | "light";
   setDataset: (dataset: IsoXmlDataset, remember?: boolean) => void;
@@ -103,7 +104,8 @@ export const useViewerStore = create<ViewerState>()(
       localePreferenceSource: "auto",
       hideEmptyCells: true,
       hideOutliers: false,
-      clipToField: false,
+      clipToField: true,
+      clipToFieldPreferenceSource: "auto",
       mapFitNonce: 0,
       theme: "dark",
       setDataset: (dataset, remember = true) => {
@@ -269,7 +271,8 @@ export const useViewerStore = create<ViewerState>()(
         ),
       setHideEmptyCells: (hideEmptyCells) => set({ hideEmptyCells }),
       setHideOutliers: (hideOutliers) => set({ hideOutliers }),
-      setClipToField: (clipToField) => set({ clipToField }),
+      setClipToField: (clipToField) =>
+        set({ clipToField, clipToFieldPreferenceSource: "user" }),
       requestMapFit: () =>
         set((state) => ({ mapFitNonce: state.mapFitNonce + 1 })),
       toggleTheme: () =>
@@ -291,6 +294,7 @@ export const useViewerStore = create<ViewerState>()(
         hideEmptyCells: state.hideEmptyCells,
         hideOutliers: state.hideOutliers,
         clipToField: state.clipToField,
+        clipToFieldPreferenceSource: state.clipToFieldPreferenceSource,
         theme: state.theme,
       }),
       merge: (persistedState, currentState) => {
@@ -302,6 +306,12 @@ export const useViewerStore = create<ViewerState>()(
           localePreferenceSource:
             persisted.localePreferenceSource ??
             (persisted.locale ? "user" : currentState.localePreferenceSource),
+          clipToField:
+            persisted.clipToFieldPreferenceSource === "user"
+              ? (persisted.clipToField ?? currentState.clipToField)
+              : currentState.clipToField,
+          clipToFieldPreferenceSource:
+            persisted.clipToFieldPreferenceSource ?? currentState.clipToFieldPreferenceSource,
         };
       },
     },

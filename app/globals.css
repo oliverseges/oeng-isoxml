@@ -489,10 +489,11 @@ a:focus-visible {
 }
 
 .topbar-locale-select {
-  display: grid;
-  gap: 2px;
+  display: inline-flex;
+  align-items: center;
   min-width: 0;
-  padding: 4px 8px 4px 9px;
+  height: 29px;
+  padding: 0 8px 0 9px;
   border: 1px solid var(--line);
   background: linear-gradient(
     180deg,
@@ -501,22 +502,16 @@ a:focus-visible {
   );
 }
 
-.topbar-locale-select > span {
-  color: var(--faint);
-  font-size: 8px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  line-height: 1;
-}
-
 .topbar-locale-field {
   position: relative;
   display: grid;
-  grid-template-columns: 14px minmax(0, 1fr) 14px;
+  grid-template-columns: 14px minmax(0, 1fr) 12px;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  min-width: 86px;
   min-width: 0;
   color: var(--text);
+  line-height: 1;
 }
 
 .topbar-locale-field > svg {
@@ -537,6 +532,7 @@ a:focus-visible {
   background: transparent;
   padding: 0;
   cursor: pointer;
+  line-height: 1;
 }
 
 .topbar-locale-select:focus-within {
@@ -4364,14 +4360,8 @@ body.resizing-table-column * {
 }
 
 @media (max-width: 1120px) {
-  .topbar-locale-select > span {
-    display: none;
-  }
-
   .topbar-locale-select {
-    padding: 0 8px;
-    height: 29px;
-    align-items: center;
+    padding-inline: 8px;
   }
 
   .dataset-switcher-wrap {
@@ -4399,8 +4389,9 @@ body.resizing-table-column * {
 
 @media (max-width: 840px) {
   .topbar-locale-field {
-    grid-template-columns: 0 minmax(0, 1fr) 12px;
+    grid-template-columns: 0 minmax(0, 1fr) 10px;
     gap: 4px;
+    min-width: 62px;
   }
 
   .topbar-locale-field > svg:first-child {

@@ -233,7 +233,7 @@ export function TopBar({
 
       <div className="topbar-actions">
         <label className="topbar-locale-select">
-          <span>{i18n.t("Language")}</span>
+          <span className="sr-only">{i18n.t("Language")}</span>
           <div className="topbar-locale-field">
             <Languages size={13} aria-hidden="true" />
             <select
