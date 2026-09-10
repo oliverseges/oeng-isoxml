@@ -296,3 +296,64 @@ export function localizeIssue(
       };
   }
 }
+
+export function localizeRuntimeError(message: string, i18n: I18n): string {
+  if (message === "No TASKDATA.XML file was found in the selected package.") {
+    return i18n.t("No TASKDATA.XML file was found in the selected package.");
+  }
+
+  const maxFiles = matchNumber(/^Choose at most (\d+) files at a time\./i, message);
+  if (maxFiles !== undefined) {
+    return i18n.t("Choose at most {count} files at a time.", { count: maxFiles });
+  }
+
+  const fileLimit = message.match(/^(.*) exceeds the 128 MiB file limit\.$/i);
+  if (fileLimit) {
+    return i18n.t("{filename} exceeds the 128 MiB file limit.", {
+      filename: fileLimit[1],
+    });
+  }
+
+  const configurableLimit = message.match(/^(.*) exceeds the configurable 128 MiB file limit\.$/i);
+  if (configurableLimit) {
+    return i18n.t("{filename} exceeds the configurable 128 MiB file limit.", {
+      filename: configurableLimit[1],
+    });
+  }
+
+  if (message === "The selected files exceed the 512 MiB package limit.") {
+    return i18n.t("The selected files exceed the 512 MiB package limit.");
+  }
+  if (message === "The selected package exceeds the 512 MiB retained-data limit.") {
+    return i18n.t("The selected package exceeds the 512 MiB retained-data limit.");
+  }
+
+  const selectedPackageCount = matchNumber(/^The selected package contains more than (\d+) files\.$/i, message);
+  if (selectedPackageCount !== undefined) {
+    return i18n.t("The selected package contains more than {count} files.", {
+      count: selectedPackageCount,
+    });
+  }
+
+  const archiveCount = message.match(/^(.*) contains more than (\d+) files\.$/i);
+  if (archiveCount) {
+    return i18n.t("{filename} contains more than {count} files.", {
+      filename: archiveCount[1],
+      count: Number(archiveCount[2]),
+    });
+  }
+
+  const unsafePath = message.match(/^Unsafe archive path: (.*)$/i);
+  if (unsafePath) {
+    return i18n.t("Unsafe archive path: {path}", { path: unsafePath[1] });
+  }
+
+  if (message === "Open an ISOXML dataset before importing a shapefile ZIP. Standalone shapefile datasets are not supported.") {
+    return i18n.t("Open an ISOXML dataset before importing a shapefile ZIP. Standalone shapefile datasets are not supported.");
+  }
+  if (message === "The shapefile ZIP did not contain a polygon geometry that can be used as a boundary overlay.") {
+    return i18n.t("The shapefile ZIP did not contain a polygon geometry that can be used as a boundary overlay.");
+  }
+
+  return message;
+}

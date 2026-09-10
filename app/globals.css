@@ -1354,8 +1354,30 @@ a:focus-visible {
 }
 
 .basemap-control,
-.map-filter-control {
+.map-filter-control,
+.measure-control {
   position: relative;
+}
+
+.measure-control .measure-clear-button {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  z-index: 2;
+  width: 14px;
+  height: 14px;
+  border: 1px solid rgba(247, 194, 76, 0.45);
+  border-radius: 999px;
+  color: #f6ddb2;
+  background: rgba(9, 18, 15, 0.95);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28);
+}
+
+.measure-control .measure-clear-button:hover,
+.measure-control .measure-clear-button:focus-visible {
+  background: rgba(111, 26, 20, 0.96);
+  border-color: rgba(255, 159, 146, 0.62);
+  color: #fff0eb;
 }
 
 .map-filter-menu {
@@ -1700,6 +1722,22 @@ a:focus-visible {
   backdrop-filter: blur(8px);
 }
 
+.measure-overlay {
+  left: 50%;
+  bottom: 48px;
+  transform: translateX(-50%);
+}
+
+.measure-overlay button {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  color: var(--accent-strong);
+  background: transparent;
+  cursor: pointer;
+}
+
 .map-coordinate {
   left: 78px;
 }
@@ -1818,6 +1856,12 @@ a:focus-visible {
 
   .map-coordinate {
     max-width: calc(100% - 92px);
+  }
+
+  .measure-overlay {
+    left: 14px;
+    transform: none;
+    max-width: calc(100% - 28px);
   }
 
   .map-coordinate span {

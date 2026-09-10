@@ -4,6 +4,7 @@ import { copyTextToClipboard } from "@/lib/client/clipboard";
 import { createI18n, type I18n } from "@/lib/client/i18n";
 import { downloadBlob } from "@/lib/isoxml/export";
 import { extremeOutlierBounds } from "@/lib/isoxml/outliers";
+import { polylineDistanceMeters } from "@/lib/isoxml/spatial";
 import { buildExecutedMapExcludedMask } from "@/lib/isoxml/time-log-map-filters";
 import type {
   DecodedTimeLog,
@@ -30,8 +31,10 @@ import {
   Minus,
   Plus,
   Route,
+  Ruler,
   Scan,
   SlidersHorizontal,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -50,6 +53,11 @@ import {
   webMercatorWorldPixel,
 } from "./map-rendering";
 import { drawMapScreenshotTooltip } from "./map-screenshot";
+import {
+  drawMeasurementOverlay,
+  formatMeasurementDistance,
+  type MeasurementPoint,
+} from "./map-measurement";
 import { useViewerStore } from "./store";
 
 const colorStops = [
@@ -304,6 +312,7 @@ export function TimeLogMapWorkspace({
     { latitude: number; longitude: number } | undefined
   >(undefined);
   const pinPlacementActiveRef = useRef(false);
+  const measureModeActiveRef = useRef(false);
   const displayFilterControlRef = useRef<HTMLDivElement>(null);
   const baseLayerControlRef = useRef<HTMLDivElement>(null);
   const [baseLayerMenuOpen, setBaseLayerMenuOpen] = useState(false);
@@ -325,6 +334,8 @@ export function TimeLogMapWorkspace({
     y: number;
   }>();
   const [mapExportError, setMapExportError] = useState<string>();
+  const [measureModeActive, setMeasureModeActive] = useState(false);
+  const [measurementPoints, setMeasurementPoints] = useState<MeasurementPoint[]>([]);
   const selectedRecordIndex = useViewerStore(
     (state) => state.selectedCellIndex,
   );
@@ -356,11 +367,25 @@ export function TimeLogMapWorkspace({
     setPinPlacementActive(active);
   }, []);
 
+  const setMeasureMode = useCallback((active: boolean) => {
+    measureModeActiveRef.current = active;
+    setMeasureModeActive(active);
+  }, []);
+
   const clearPinnedCoordinate = useCallback(() => {
     pinnedLatLngRef.current = undefined;
     setPinnedCoordinate(undefined);
     setPinnedScreenPosition(undefined);
   }, []);
+
+  const clearMeasurement = useCallback(() => {
+    setMeasurementPoints([]);
+  }, []);
+
+  const totalMeasuredDistance = useMemo(
+    () => polylineDistanceMeters(measurementPoints),
+    [measurementPoints],
+  );
 
   useEffect(() => {
     if (!baseLayerMenuOpen && !displayFilterMenuOpen) return;
@@ -608,12 +633,16 @@ export function TimeLogMapWorkspace({
       } else if (interactive) {
         setSelectedScreenPosition(undefined);
       }
+
+      drawMeasurementOverlay(context, map, measurementPoints, i18n);
     },
     [
       classColors,
       classification,
       dataset.boundaries,
       excludedMask,
+      i18n,
+      measurementPoints,
       numericValues,
       pointRecordIndexes,
       pointWorldPixels,
@@ -793,6 +822,13 @@ export function TimeLogMapWorkspace({
           pointHitBucketsRef.current,
           event.containerPoint,
         );
+        if (measureModeActiveRef.current) {
+          setMeasurementPoints((current) => [
+            ...current,
+            { latitude: event.latlng.lat, longitude: event.latlng.lng },
+          ]);
+          return;
+        }
         if (recordIndex !== undefined) {
           clearPinnedCoordinate();
           setPinPlacementMode(false);
@@ -840,6 +876,9 @@ export function TimeLogMapWorkspace({
     };
   }, [
     clearPinnedCoordinate,
+    i18n,
+    measurementPoints,
+    setMeasureMode,
     setPinPlacementMode,
     setSelectedRecord,
     timeLog.bbox,
@@ -849,9 +888,10 @@ export function TimeLogMapWorkspace({
     const animationFrame = requestAnimationFrame(() => {
       clearPinnedCoordinate();
       setPinPlacementMode(false);
+      setMeasureMode(false);
     });
     return () => cancelAnimationFrame(animationFrame);
-  }, [clearPinnedCoordinate, setPinPlacementMode, timeLog.instanceId]);
+  }, [clearPinnedCoordinate, setMeasureMode, setPinPlacementMode, timeLog.instanceId]);
 
   useEffect(() => {
     if (selectedRecordIndex === undefined) return;
@@ -1137,7 +1177,10 @@ export function TimeLogMapWorkspace({
         <button
           type="button"
           className={pinPlacementActive ? "active" : ""}
-          onClick={() => setPinPlacementMode(!pinPlacementActive)}
+          onClick={() => {
+            setMeasureMode(false);
+            setPinPlacementMode(!pinPlacementActive);
+          }}
           aria-label={
             pinPlacementActive
               ? i18n.t("Cancel coordinate pin placement")
@@ -1157,6 +1200,45 @@ export function TimeLogMapWorkspace({
         >
           <MapPin size={16} />
         </button>
+        <div className="measure-control">
+          <button
+            type="button"
+            className={measureModeActive ? "active" : ""}
+            onClick={() => {
+              setPinPlacementMode(false);
+              setMeasureMode(!measureModeActive);
+            }}
+            aria-label={
+              measureModeActive
+                ? i18n.t("Stop measuring")
+                : i18n.t("Measure distance")
+            }
+            aria-pressed={measureModeActive}
+            title={
+              measureModeActive
+                ? i18n.t("Stop measuring")
+                : i18n.t("Click map to add measurement points")
+            }
+            data-tooltip={
+              measureModeActive
+                ? i18n.t("Stop measuring")
+                : i18n.t("Measure distance")
+            }
+          >
+            <Ruler size={16} />
+          </button>
+          {measurementPoints.length > 0 && (
+            <button
+              type="button"
+              className="measure-clear-button"
+              onClick={clearMeasurement}
+              aria-label={i18n.t("Clear measurement")}
+              title={i18n.t("Clear measurement")}
+            >
+              <X size={10} aria-hidden="true" />
+            </button>
+          )}
+        </div>
         <div className="map-filter-control" ref={displayFilterControlRef}>
           <button
             type="button"
@@ -1440,6 +1522,30 @@ export function TimeLogMapWorkspace({
           </small>
         )}
       </div>
+      {(measureModeActive || measurementPoints.length > 0) && (
+        <div className="diagnostic-overlay measure-overlay">
+          <Ruler size={13} />
+          <span>{i18n.t("Measure")}</span>
+          <strong>
+            {measurementPoints.length > 1
+              ? formatMeasurementDistance(totalMeasuredDistance, i18n)
+              : i18n.t("Add points to measure total distance")}
+          </strong>
+          {measurementPoints.length > 0 && (
+            <>
+              <span aria-hidden="true">·</span>
+              <strong>{i18n.t("counts.points", { count: measurementPoints.length })}</strong>
+              <button
+                type="button"
+                onClick={clearMeasurement}
+                title={i18n.t("Clear measurement")}
+              >
+                <X size={12} aria-hidden="true" />
+              </button>
+            </>
+          )}
+        </div>
+      )}
       <div className="diagnostic-overlay">
         <Route size={13} />
         <span>{i18n.t("Executed path")}</span>

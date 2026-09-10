@@ -8,6 +8,7 @@ import { buildMapChannelValues } from "@/lib/isoxml/map-channel-model";
 import {
     geographicCellBounds,
     geographicCellCenter,
+  polylineDistanceMeters,
     geographicGridBounds,
     gridCellAreaSquareMeters,
     gridCellDimensionsMeters,
@@ -41,9 +42,11 @@ import {
     MapPin,
     Minus,
     Plus,
+    Ruler,
     Scan,
     ScanLine,
     SlidersHorizontal,
+    X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -51,6 +54,11 @@ import {
     MAP_MAX_ZOOM,
     MAP_MIN_ZOOM,
 } from "./map-options";
+import {
+  drawMeasurementOverlay,
+  formatMeasurementDistance,
+  type MeasurementPoint,
+} from "./map-measurement";
 import { buildMapGridRaster, type MapGridRaster } from "./map-rendering";
 import { drawMapScreenshotTooltip } from "./map-screenshot";
 import { useViewerStore } from "./store";
@@ -368,6 +376,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
     { latitude: number; longitude: number } | undefined
   >(undefined);
   const pinPlacementActiveRef = useRef(false);
+  const measureModeActiveRef = useRef(false);
   const [liveCoordinate, setLiveCoordinate] = useState(() =>
     isSpatialGridValid(grid)
       ? `${grid.origin.latitude.toFixed(6)}, ${grid.origin.longitude.toFixed(6)}`
@@ -386,6 +395,8 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
   const [baseLayerMenuOpen, setBaseLayerMenuOpen] = useState(false);
   const [displayFilterMenuOpen, setDisplayFilterMenuOpen] = useState(false);
   const [mapExportError, setMapExportError] = useState<string>();
+  const [measureModeActive, setMeasureModeActive] = useState(false);
+  const [measurementPoints, setMeasurementPoints] = useState<MeasurementPoint[]>([]);
   const selectedCellIndex = useViewerStore((state) => state.selectedCellIndex);
   const hoveredCellIndex = useViewerStore((state) => state.hoveredCellIndex);
   const setSelectedCell = useViewerStore((state) => state.setSelectedCell);
@@ -415,11 +426,25 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
     setPinPlacementActive(active);
   }, []);
 
+  const setMeasureMode = useCallback((active: boolean) => {
+    measureModeActiveRef.current = active;
+    setMeasureModeActive(active);
+  }, []);
+
   const clearPinnedCoordinate = useCallback(() => {
     pinnedLatLngRef.current = undefined;
     setPinnedCoordinate(undefined);
     setPinnedScreenPosition(undefined);
   }, []);
+
+  const clearMeasurement = useCallback(() => {
+    setMeasurementPoints([]);
+  }, []);
+
+  const totalMeasuredDistance = useMemo(
+    () => polylineDistanceMeters(measurementPoints),
+    [measurementPoints],
+  );
 
   useEffect(() => {
     gridRef.current = grid;
@@ -782,6 +807,8 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
       }
       context.restore();
 
+      drawMeasurementOverlay(context, map, measurementPoints, i18n);
+
       context.save();
       for (const boundary of dataset.boundaries) {
         if (boundary.coordinates.length < 2) continue;
@@ -804,6 +831,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
       hiddenCellMask,
       classColors,
       i18n,
+      measurementPoints,
       noDataCells,
       numericValueByCell,
       selectedCellIndex,
@@ -1027,6 +1055,13 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
           insideField
             ? candidateIndex
             : undefined;
+        if (measureModeActiveRef.current) {
+          setMeasurementPoints((current) => [
+            ...current,
+            { latitude: event.latlng.lat, longitude: event.latlng.lng },
+          ]);
+          return;
+        }
         if (index !== undefined) {
           clearPinnedCoordinate();
           setPinPlacementMode(false);
@@ -1073,6 +1108,8 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
   }, [
     clearPinnedCoordinate,
     i18n,
+    measurementPoints,
+    setMeasureMode,
     setHoveredCell,
     setPinPlacementMode,
     setSelectedCell,
@@ -1087,6 +1124,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
       );
       clearPinnedCoordinate();
       setPinPlacementMode(false);
+      setMeasureMode(false);
       fitGrid();
     });
     return () => cancelAnimationFrame(animationFrame);
@@ -1096,6 +1134,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
     grid.origin.latitude,
     grid.origin.longitude,
     i18n,
+    setMeasureMode,
     setPinPlacementMode,
     spatiallyValid,
   ]);
@@ -1379,7 +1418,10 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
         <button
           type="button"
           className={pinPlacementActive ? "active" : ""}
-          onClick={() => setPinPlacementMode(!pinPlacementActive)}
+          onClick={() => {
+            setMeasureMode(false);
+            setPinPlacementMode(!pinPlacementActive);
+          }}
           aria-label={
             pinPlacementActive
               ? i18n.t("Cancel coordinate pin placement")
@@ -1399,6 +1441,45 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
         >
           <MapPin size={16} />
         </button>
+        <div className="measure-control">
+          <button
+            type="button"
+            className={measureModeActive ? "active" : ""}
+            onClick={() => {
+              setPinPlacementMode(false);
+              setMeasureMode(!measureModeActive);
+            }}
+            aria-label={
+              measureModeActive
+                ? i18n.t("Stop measuring")
+                : i18n.t("Measure distance")
+            }
+            aria-pressed={measureModeActive}
+            title={
+              measureModeActive
+                ? i18n.t("Stop measuring")
+                : i18n.t("Click map to add measurement points")
+            }
+            data-tooltip={
+              measureModeActive
+                ? i18n.t("Stop measuring")
+                : i18n.t("Measure distance")
+            }
+          >
+            <Ruler size={16} />
+          </button>
+          {measurementPoints.length > 0 && (
+            <button
+              type="button"
+              className="measure-clear-button"
+              onClick={clearMeasurement}
+              aria-label={i18n.t("Clear measurement")}
+              title={i18n.t("Clear measurement")}
+            >
+              <X size={10} aria-hidden="true" />
+            </button>
+          )}
+        </div>
         <div className="map-filter-control" ref={displayFilterControlRef}>
           <button
             type="button"
@@ -1703,6 +1784,30 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
           </small>
         )}
       </div>
+      {(measureModeActive || measurementPoints.length > 0) && (
+        <div className="diagnostic-overlay measure-overlay">
+          <Ruler size={13} />
+          <span>{i18n.t("Measure")}</span>
+          <strong>
+            {measurementPoints.length > 1
+              ? formatMeasurementDistance(totalMeasuredDistance, i18n)
+              : i18n.t("Add points to measure total distance")}
+          </strong>
+          {measurementPoints.length > 0 && (
+            <>
+              <span aria-hidden="true">·</span>
+              <strong>{i18n.t("counts.points", { count: measurementPoints.length })}</strong>
+              <button
+                type="button"
+                onClick={clearMeasurement}
+                title={i18n.t("Clear measurement")}
+              >
+                <X size={12} aria-hidden="true" />
+              </button>
+            </>
+          )}
+        </div>
+      )}
       <div className="diagnostic-overlay">
         <ScanLine size={13} />
         <span>{i18n.t("Binary layout")}</span>

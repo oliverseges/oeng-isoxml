@@ -5,6 +5,7 @@ import {
   detectPreferredLocale,
     type SupportedLocale,
 } from "@/lib/client/i18n";
+import { localizeRuntimeError } from "@/lib/client/issue-i18n";
 import {
     downloadBlob,
     downloadText,
@@ -1041,7 +1042,7 @@ export function ViewerApp() {
         <div className="error-toast" role="alert">
           <div>
               <small>{i18n.t("Import stopped").toUpperCase()}</small>
-            <strong>{importError}</strong>
+            <strong>{localizeRuntimeError(importError, i18n)}</strong>
           </div>
           <button type="button" onClick={() => setImportError(undefined)}>
               {i18n.t("Dismiss").toUpperCase()}

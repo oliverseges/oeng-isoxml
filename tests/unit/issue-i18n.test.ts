@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createI18n } from "@/lib/client/i18n";
-import { localizeIssue } from "@/lib/client/issue-i18n";
+import { localizeIssue, localizeRuntimeError } from "@/lib/client/issue-i18n";
 import type { ValidationIssue } from "@/lib/isoxml/types";
 
 function issue(partial: Partial<ValidationIssue> & Pick<ValidationIssue, "code" | "message" | "explanation" | "suggestedAction" | "severity" | "category" | "recovered" | "resultsMayBeIncomplete" | "relatedObjects" | "id">): ValidationIssue {
@@ -63,5 +63,14 @@ describe("issue i18n", () => {
     expect(localized.explanation).toBe(
       "A positive integer row and column count is required.",
     );
+  });
+
+  it("localizes runtime import errors in Danish", () => {
+    expect(
+      localizeRuntimeError(
+        "No TASKDATA.XML file was found in the selected package.",
+        createI18n("da"),
+      ),
+    ).toBe("Ingen TASKDATA.XML-fil blev fundet i den valgte pakke.");
   });
 });

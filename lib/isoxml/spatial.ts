@@ -7,6 +7,11 @@ export interface GeographicCellBounds {
   west: number;
 }
 
+export interface GeographicPoint {
+  latitude: number;
+  longitude: number;
+}
+
 export type GeographicGridBounds = [[number, number], [number, number]];
 
 export interface GeographicViewportBounds {
@@ -46,6 +51,33 @@ export function pointIsInsideBoundary(
     if (crossesLatitude && longitude < crossingLongitude) inside = !inside;
   }
   return inside;
+}
+
+export function geographicDistanceMeters(
+  start: GeographicPoint,
+  end: GeographicPoint,
+): number {
+  const earthRadiusMeters = 6_371_008.8;
+  const latitudeDelta = ((end.latitude - start.latitude) * Math.PI) / 180;
+  const longitudeDelta = ((end.longitude - start.longitude) * Math.PI) / 180;
+  const startLatitudeRadians = (start.latitude * Math.PI) / 180;
+  const endLatitudeRadians = (end.latitude * Math.PI) / 180;
+  const sinLatitude = Math.sin(latitudeDelta / 2);
+  const sinLongitude = Math.sin(longitudeDelta / 2);
+  const a =
+    sinLatitude * sinLatitude +
+    Math.cos(startLatitudeRadians) *
+      Math.cos(endLatitudeRadians) *
+      sinLongitude * sinLongitude;
+  return 2 * earthRadiusMeters * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+export function polylineDistanceMeters(points: GeographicPoint[]): number {
+  let total = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    total += geographicDistanceMeters(points[index - 1], points[index]);
+  }
+  return total;
 }
 
 export function gridStepDegrees(grid: DecodedGrid): {
