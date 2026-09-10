@@ -1763,6 +1763,11 @@ a:focus-visible {
   cursor: crosshair;
 }
 
+.map-workspace.measure-mode-active .leaflet-container,
+.map-workspace.measure-mode-active .map-data-canvas {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath d='M4 16 16 4l2 2L6 18 4 16Z' fill='%23f7c24c' stroke='%23081210' stroke-width='1'/%3E%3Cpath d='M6.5 13.5 10 17' stroke='%23081210' stroke-width='1'/%3E%3Cpath d='M8.5 11.5 12 15' stroke='%23081210' stroke-width='1'/%3E%3Cpath d='M10.5 9.5 14 13' stroke='%23081210' stroke-width='1'/%3E%3C/svg%3E") 4 16, crosshair;
+}
+
 .map-coordinate button {
   flex: 0 0 auto;
   border: 0;

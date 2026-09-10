@@ -439,6 +439,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
 
   const clearMeasurement = useCallback(() => {
     setMeasurementPoints([]);
+    setMeasureMode(false);
   }, []);
 
   const totalMeasuredDistance = useMemo(
@@ -1107,9 +1108,6 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
     };
   }, [
     clearPinnedCoordinate,
-    i18n,
-    measurementPoints,
-    setMeasureMode,
     setHoveredCell,
     setPinPlacementMode,
     setSelectedCell,
@@ -1378,7 +1376,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
 
   return (
     <main
-      className={`map-workspace${pinPlacementActive ? " pin-placement-active" : ""}`}
+      className={`map-workspace${pinPlacementActive ? " pin-placement-active" : ""}${measureModeActive ? " measure-mode-active" : ""}`}
       aria-label={i18n.t("Interactive ISOXML map")}
     >
       <div
@@ -1472,7 +1470,10 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
             <button
               type="button"
               className="measure-clear-button"
-              onClick={clearMeasurement}
+              onClick={(event) => {
+                event.stopPropagation();
+                clearMeasurement();
+              }}
               aria-label={i18n.t("Clear measurement")}
               title={i18n.t("Clear measurement")}
             >

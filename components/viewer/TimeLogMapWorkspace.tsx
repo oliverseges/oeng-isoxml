@@ -380,6 +380,7 @@ export function TimeLogMapWorkspace({
 
   const clearMeasurement = useCallback(() => {
     setMeasurementPoints([]);
+    setMeasureMode(false);
   }, []);
 
   const totalMeasuredDistance = useMemo(
@@ -876,9 +877,6 @@ export function TimeLogMapWorkspace({
     };
   }, [
     clearPinnedCoordinate,
-    i18n,
-    measurementPoints,
-    setMeasureMode,
     setPinPlacementMode,
     setSelectedRecord,
     timeLog.bbox,
@@ -1137,7 +1135,7 @@ export function TimeLogMapWorkspace({
 
   return (
     <main
-      className={`map-workspace${pinPlacementActive ? " pin-placement-active" : ""}`}
+      className={`map-workspace${pinPlacementActive ? " pin-placement-active" : ""}${measureModeActive ? " measure-mode-active" : ""}`}
       aria-label={i18n.t("Executed ISOXML time-log map")}
     >
       <div
@@ -1231,7 +1229,10 @@ export function TimeLogMapWorkspace({
             <button
               type="button"
               className="measure-clear-button"
-              onClick={clearMeasurement}
+              onClick={(event) => {
+                event.stopPropagation();
+                clearMeasurement();
+              }}
               aria-label={i18n.t("Clear measurement")}
               title={i18n.t("Clear measurement")}
             >
