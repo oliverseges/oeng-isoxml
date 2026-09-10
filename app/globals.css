@@ -523,6 +523,15 @@ a:focus-visible {
   justify-self: end;
 }
 
+.topbar-locale-code {
+  display: none;
+  min-width: 0;
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+}
+
 .topbar-locale-field select {
   min-width: 0;
   border: 0;
@@ -4396,6 +4405,16 @@ body.resizing-table-column * {
 
   .topbar-locale-field > svg:first-child {
     display: none;
+  }
+
+  .topbar-locale-code {
+    display: block;
+  }
+
+  .topbar-locale-field select {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
   }
 
   .topbar-button span {

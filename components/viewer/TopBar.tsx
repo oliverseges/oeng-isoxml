@@ -236,6 +236,9 @@ export function TopBar({
           <span className="sr-only">{i18n.t("Language")}</span>
           <div className="topbar-locale-field">
             <Languages size={13} aria-hidden="true" />
+            <span className="topbar-locale-code" aria-hidden="true">
+              {locale.toUpperCase()}
+            </span>
             <select
               value={locale}
               aria-label={i18n.t("Choose interface language")}
