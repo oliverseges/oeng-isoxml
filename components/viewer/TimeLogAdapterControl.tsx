@@ -1,7 +1,9 @@
 "use client";
 
 import { AlertTriangle, CheckCircle2, Cpu, LoaderCircle } from "lucide-react";
+import { createI18n } from "@/lib/client/i18n";
 import type { DecodedTimeLog } from "@/lib/isoxml/types";
+import { useViewerStore } from "./store";
 
 interface TimeLogAdapterControlProps {
   timeLog: DecodedTimeLog;
@@ -16,6 +18,8 @@ export function TimeLogAdapterControl({
   busy = false,
   variant = "inspector",
 }: TimeLogAdapterControlProps) {
+  const locale = useViewerStore((state) => state.locale);
+  const i18n = createI18n(locale);
   const selection = timeLog.adapterSelection;
   const selectValue =
     selection.mode === "manual" && selection.adapterId
@@ -28,34 +32,34 @@ export function TimeLogAdapterControl({
       ? AlertTriangle
       : CheckCircle2;
   const status = busy
-    ? "Applying adapter"
+    ? i18n.t("Applying adapter")
     : needsChoice
-      ? "Choose adapter"
+      ? i18n.t("Choose adapter")
       : selection.mode === "manual"
-        ? "Manual"
-        : "Automatic";
+        ? i18n.t("Manual")
+        : i18n.t("Automatic");
   const activeCandidate = selection.candidates.find(
     (candidate) => candidate.id === selection.adapterId,
   );
   const selectionMode =
     selection.mode === "unresolved"
-      ? "Needs choice"
+      ? i18n.t("Needs choice")
       : selection.mode === "manual"
-        ? "Manual override"
-        : "Automatic";
+        ? i18n.t("Manual override")
+        : i18n.t("Automatic");
 
   return (
     <section
       className={`timelog-adapter-control ${variant} ${needsChoice ? "needs-choice" : ""}`}
-      aria-label="Time-log decoder adapter"
+      aria-label={i18n.t("Time-log decoder adapter")}
     >
       <div className="timelog-adapter-heading">
         <span className="timelog-adapter-icon">
           <Cpu size={15} />
         </span>
         <div>
-          <small>DECODER ADAPTER</small>
-          <strong>{selection.adapterLabel ?? "No adapter selected"}</strong>
+          <small>{i18n.t("Decoder adapter").toUpperCase()}</small>
+          <strong>{selection.adapterLabel ?? i18n.t("No adapter selected")}</strong>
         </div>
         <span className={`adapter-status ${selection.mode}`} aria-live="polite">
           <StatusIcon size={11} className={busy ? "spin" : undefined} />
@@ -63,7 +67,7 @@ export function TimeLogAdapterControl({
         </span>
       </div>
       <label className="timelog-adapter-select">
-        <span>Adapter selection</span>
+        <span>{i18n.t("Adapter selection")}</span>
         <select
           value={selectValue}
           disabled={busy}
@@ -75,7 +79,7 @@ export function TimeLogAdapterControl({
             )
           }
         >
-          <option value="automatic">Automatic selection (recommended)</option>
+          <option value="automatic">{i18n.t("Automatic selection (recommended)")}</option>
           {selection.candidates.map((candidate) => (
             <option
               key={candidate.id}
@@ -83,7 +87,7 @@ export function TimeLogAdapterControl({
               disabled={!candidate.compatible}
             >
               {candidate.label} · {candidate.score}/100
-              {!candidate.compatible ? " · unavailable" : ""}
+              {!candidate.compatible ? ` · ${i18n.t("unavailable")}` : ""}
             </option>
           ))}
         </select>
@@ -93,44 +97,44 @@ export function TimeLogAdapterControl({
         <>
           <dl className="adapter-selection-summary">
             <div>
-              <dt>Selection mode</dt>
+              <dt>{i18n.t("Selection mode")}</dt>
               <dd>{selectionMode}</dd>
             </div>
             <div>
-              <dt>Confidence</dt>
-              <dd>{selection.confidence}</dd>
+              <dt>{i18n.t("Confidence")}</dt>
+              <dd>{i18n.t(selection.confidence)}</dd>
             </div>
             <div>
-              <dt>Active score</dt>
+              <dt>{i18n.t("Active score")}</dt>
               <dd>{activeCandidate ? `${activeCandidate.score}/100` : "—"}</dd>
             </div>
             <div>
-              <dt>Declared layout</dt>
-              <dd>Type {timeLog.timeLogType}</dd>
+              <dt>{i18n.t("Declared layout")}</dt>
+              <dd>{i18n.t("Type")} {timeLog.timeLogType}</dd>
             </div>
             <div>
-              <dt>Decoded records</dt>
-              <dd>{timeLog.decodedRecordCount.toLocaleString()}</dd>
+              <dt>{i18n.t("Decoded records")}</dt>
+              <dd>{i18n.formatInteger(timeLog.decodedRecordCount)}</dd>
             </div>
             <div>
-              <dt>Decoded bytes</dt>
+              <dt>{i18n.t("Decoded bytes")}</dt>
               <dd>
-                {timeLog.decodedByteLength.toLocaleString()} /{" "}
-                {timeLog.binaryLength.toLocaleString()}
+                {i18n.formatInteger(timeLog.decodedByteLength)} /{" "}
+                {i18n.formatInteger(timeLog.binaryLength)}
               </dd>
             </div>
             <div className="wide">
-              <dt>Companion template</dt>
+              <dt>{i18n.t("Companion template")}</dt>
               <dd title={timeLog.headerFilename}>{timeLog.headerFilename}</dd>
             </div>
             <div className="wide">
-              <dt>Binary source</dt>
+              <dt>{i18n.t("Binary source")}</dt>
               <dd title={timeLog.filename}>{timeLog.filename}</dd>
             </div>
           </dl>
           <div className="adapter-candidate-list">
             <div className="adapter-candidate-title">
-              <span>REGISTERED ADAPTER EVIDENCE</span>
+              <span>{i18n.t("Registered adapter evidence").toUpperCase()}</span>
               <b>{selection.candidates.length}</b>
             </div>
             {selection.candidates.map((candidate) => (
@@ -148,10 +152,10 @@ export function TimeLogAdapterControl({
                   <span>{candidate.score}/100</span>
                 </header>
                 <div className="adapter-candidate-flags">
-                  {candidate.id === selection.adapterId && <b>SELECTED</b>}
-                  <b>{candidate.compatible ? "COMPATIBLE" : "UNAVAILABLE"}</b>
+                  {candidate.id === selection.adapterId && <b>{i18n.t("Selected").toUpperCase()}</b>}
+                  <b>{i18n.t(candidate.compatible ? "Compatible" : "Unavailable").toUpperCase()}</b>
                   <b>
-                    {candidate.autoSelectable ? "AUTO ELIGIBLE" : "MANUAL ONLY"}
+                    {i18n.t(candidate.autoSelectable ? "Auto eligible" : "Manual only").toUpperCase()}
                   </b>
                 </div>
                 <p>{candidate.reason}</p>
@@ -163,8 +167,9 @@ export function TimeLogAdapterControl({
       {needsChoice &&
         selection.candidates.some((candidate) => candidate.compatible) && (
           <div className="adapter-choice-note">
-            The source is unchanged. Selecting an adapter only changes how its
-            retained binary records are interpreted.
+            {i18n.t(
+              "The source is unchanged. Selecting an adapter only changes how its retained binary records are interpreted.",
+            )}
           </div>
         )}
     </section>
@@ -182,13 +187,15 @@ export function TimeLogAdapterWorkspace({
   onSelectAdapter,
   busy,
 }: TimeLogAdapterWorkspaceProps) {
+  const locale = useViewerStore((state) => state.locale);
+  const i18n = createI18n(locale);
+
   return (
     <main className="workspace-loading adapter-workspace">
       <Cpu size={30} />
-      <strong>No decoded executed channel is available yet</strong>
+      <strong>{i18n.t("No decoded executed channel is available yet")}</strong>
       <span>
-        Review the automatic match or choose a compatible decoder for{" "}
-        {timeLog.id}.
+        {i18n.t("Review the automatic match or choose a compatible decoder for")} {timeLog.id}.
       </span>
       <TimeLogAdapterControl
         timeLog={timeLog}

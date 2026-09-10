@@ -41,6 +41,7 @@ import {
   type TimeLogChannelMetrics,
 } from "@/lib/isoxml/timelog-channel-quality";
 import type { IsoXmlDataset, IsoXmlObject } from "@/lib/isoxml/types";
+import { createI18n } from "@/lib/client/i18n";
 import { useViewerStore } from "./store";
 import {
   emptyExecutedContainerIds,
@@ -113,10 +114,16 @@ function containsExecutedData(object: IsoXmlObject): boolean {
   return object.children.some(containsExecutedData);
 }
 
-function formatMemorySize(bytes: number): string {
+function formatMemorySize(bytes: number, locale: string): string {
   return bytes >= 1024 * 1024
-    ? `${(bytes / (1024 * 1024)).toFixed(1)} MiB`
-    : `${(bytes / 1024).toFixed(1)} KiB`;
+    ? `${new Intl.NumberFormat(locale, {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      }).format(bytes / (1024 * 1024))} MiB`
+    : `${new Intl.NumberFormat(locale, {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      }).format(bytes / 1024)} KiB`;
 }
 
 interface DatasetTreeProps {
@@ -130,6 +137,8 @@ export function DatasetTree({
   search,
   onSearchChange,
 }: DatasetTreeProps) {
+  const locale = useViewerStore((state) => state.locale);
+  const i18n = createI18n(locale);
   const [filterMode, setFilterMode] = useState<"all" | "issues" | "spatial">(
     "all",
   );
@@ -226,47 +235,48 @@ export function DatasetTree({
   }> = [
     {
       key: "hideEmpty",
-      label: "No recorded values",
-      description: "Hide DLV channels that never occur in the binary records.",
+      label: i18n.t("No recorded values"),
+      description: i18n.t("Hide DLV channels that never occur in the binary records."),
       count: qualityCounts.empty,
     },
     {
       key: "hideMissingPresentation",
-      label: "Missing value presentation",
-      description:
+      label: i18n.t("Missing value presentation"),
+      description: i18n.t(
         "Hide channels without a resolved device value presentation; raw integers remain available in Show all.",
+      ),
       count: qualityCounts.missingPresentation,
     },
     {
       key: "hideAllZero",
-      label: "All values are zero",
-      description: "Uses the declared value presentation when checking zero.",
+      label: i18n.t("All values are zero"),
+      description: i18n.t("Uses the declared value presentation when checking zero."),
       count: qualityCounts.allZero,
     },
     {
       key: "hideConstant",
-      label: "All values are constant",
-      description: "Hide channels with one repeated displayed value.",
+      label: i18n.t("All values are constant"),
+      description: i18n.t("Hide channels with one repeated displayed value."),
       count: qualityCounts.constant,
     },
     {
       key: "hideNoPosition",
-      label: "No valid location",
-      description: "Hide channels with no value attached to a valid position.",
+      label: i18n.t("No valid location"),
+      description: i18n.t("Hide channels with no value attached to a valid position."),
       count: qualityCounts.noPosition,
     },
     {
       key: "hideSinglePosition",
-      label: "Only one location",
-      description:
+      label: i18n.t("Only one location"),
+      description: i18n.t(
         "Hide channels whose valid positioned values fit within a five-metre cluster.",
+      ),
       count: qualityCounts.singlePosition,
     },
     {
       key: "hideSparse",
-      label: "Fewer than three values",
-      description:
-        "Hide very sparse channels even when their positions differ.",
+      label: i18n.t("Fewer than three values"),
+      description: i18n.t("Hide very sparse channels even when their positions differ."),
       count: qualityCounts.sparse,
     },
   ];
@@ -372,26 +382,31 @@ export function DatasetTree({
       },
       {
         id: "import-summary",
-        label: "Import summary",
-        meta: `${dataset.files.length} files`,
+        label: i18n.t("Import summary"),
+        meta: i18n.t("counts.files", { count: dataset.files.length }),
         depth: 1,
         kind: "section",
         parentId: "dataset",
       },
       {
         id: "validation",
-        label: "Validation",
+        label: i18n.t("Validation"),
         meta: actionableIssueCount
-          ? `${actionableIssueCount} ${actionableIssueCount === 1 ? "issue" : "issues"}`
+          ? i18n.t("counts.issues", { count: actionableIssueCount })
           : infoCount
-            ? `${infoCount} ${infoCount === 1 ? "note" : "notes"}`
-            : "No issues",
+            ? i18n.t("counts.notes", { count: infoCount })
+            : i18n.t("No issues"),
         depth: 1,
         kind: "validation",
         warning: actionableIssueCount > 0,
         warningMessage: actionableIssueCount
-          ? `${errorCount} ${errorCount === 1 ? "error" : "errors"} and ${warningCount} ${warningCount === 1 ? "warning" : "warnings"}. Click this row to open the validation report.`
-          : `${infoCount} informational ${infoCount === 1 ? "note is" : "notes are"} available. Click this row to open the validation report.`,
+          ? i18n.t("{errors} and {warnings}. Click this row to open the validation report.", {
+              errors: i18n.t("counts.errors", { count: errorCount }),
+              warnings: i18n.t("counts.warnings", { count: warningCount }),
+            })
+          : i18n.t("{notes} available. Click this row to open the validation report.", {
+              notes: i18n.t("counts.notes", { count: infoCount }),
+            }),
         parentId: "dataset",
       },
     ];
@@ -405,8 +420,8 @@ export function DatasetTree({
     if (customers.length || farms.length) {
       next.push({
         id: "customers-farms",
-        label: "Customers & farms",
-        meta: `${customers.length} CTR · ${farms.length} FRM`,
+        label: i18n.t("Customers & farms"),
+        meta: `${i18n.formatInteger(customers.length)} CTR · ${i18n.formatInteger(farms.length)} FRM`,
         depth: 1,
         kind: "section",
         parentId: "dataset",
@@ -418,7 +433,7 @@ export function DatasetTree({
             customer.attributes.B ??
             customer.attributes.CustomerDesignator ??
             customer.id ??
-            "Unnamed customer",
+            i18n.t("Unnamed customer"),
           meta: customer.id ?? "CTR",
           depth: 2,
           kind: "customer",
@@ -450,7 +465,7 @@ export function DatasetTree({
             farm.attributes.B ??
             farm.attributes.FarmDesignator ??
             farm.id ??
-            "Unnamed farm",
+            i18n.t("Unnamed farm"),
           meta: farm.id ?? "FRM",
           depth: customer ? 3 : 2,
           kind: "farm",
@@ -464,8 +479,8 @@ export function DatasetTree({
 
     next.push({
       id: "tasks",
-      label: "Tasks",
-      meta: String(dataset.tasks.length),
+      label: i18n.t("Tasks"),
+      meta: i18n.formatInteger(dataset.tasks.length),
       depth: 1,
       kind: "section",
       parentId: "dataset",
@@ -494,14 +509,16 @@ export function DatasetTree({
         depth: 2,
         kind: "task",
         warning: task.issueCount > 0,
-        warningMessage: `${task.issueCount} validation ${task.issueCount === 1 ? "issue is" : "issues are"} related to this task or its grids.`,
+        warningMessage: i18n.t("{issues} relate to this task or its grids.", {
+          issues: i18n.t("counts.issues", { count: task.issueCount }),
+        }),
         parentId: "tasks",
         taskInstanceId: task.instanceId,
       });
       next.push({
         id: `field:${task.instanceId}`,
-        label: fieldName ?? "Field unresolved",
-        meta: fieldId ? `${fieldId} · Geometry` : "Geometry",
+        label: fieldName ?? i18n.t("Field unresolved"),
+        meta: fieldId ? `${fieldId} · ${i18n.t("Geometry")}` : i18n.t("Geometry"),
         depth: 3,
         kind: "map",
         parentId: `task:${task.instanceId}`,
@@ -516,8 +533,8 @@ export function DatasetTree({
       if (importedBoundaries.length) {
         next.push({
           id: `boundaries:${task.instanceId}`,
-          label: "Boundary overlays",
-          meta: String(importedBoundaries.length),
+          label: i18n.t("Boundary overlays"),
+          meta: i18n.formatInteger(importedBoundaries.length),
           depth: 3,
           kind: "section",
           parentId: `task:${task.instanceId}`,
@@ -528,7 +545,9 @@ export function DatasetTree({
           next.push({
             id: `boundary:${task.instanceId}:${boundary.id}:${index}`,
             label: boundary.name,
-            meta: `${boundary.coordinates.length} points`,
+            meta: i18n.t("counts.points", {
+              count: boundary.coordinates.length,
+            }),
             depth: 4,
             kind: "map",
             parentId: `boundaries:${task.instanceId}`,
@@ -536,14 +555,16 @@ export function DatasetTree({
             boundaryId: boundary.id,
             spatial: true,
             hoverLabel:
-              "Imported shapefile boundary overlay. Click to use this overlay for clipping and map fitting.",
+              i18n.t(
+                "Imported shapefile boundary overlay. Click to use this overlay for clipping and map fitting.",
+              ),
           });
         });
       }
       next.push({
         id: `planned:${task.instanceId}`,
-        label: "Planned data",
-        meta: `${task.gridIds.length} grid`,
+        label: i18n.t("Planned data"),
+        meta: i18n.t("counts.grids", { count: task.gridIds.length }),
         depth: 3,
         kind: "section",
         dataScope: "planned",
@@ -557,7 +578,7 @@ export function DatasetTree({
         next.push({
           id: `grid:${grid.instanceId}`,
           label: grid.name,
-          meta: `${grid.rows}×${grid.columns} · Type ${grid.gridType}`,
+          meta: `${i18n.formatInteger(grid.rows)}×${i18n.formatInteger(grid.columns)} · ${i18n.t("Type")} ${grid.gridType}`,
           depth: 4,
           kind: "grid",
           dataScope: "planned",
@@ -568,16 +589,18 @@ export function DatasetTree({
           ),
           warningMessage:
             grid.validationIssues.find((issue) => issue.severity !== "info")
-              ?.message ?? "This grid has validation issues.",
+              ?.message ?? i18n.t("This grid has validation issues."),
           parentId: `planned:${task.instanceId}`,
           spatial: true,
         });
         grid.channels.forEach((channel) => {
+          const productLabel = channel.productName ?? i18n.t("Unresolved product");
+          const unitLabel = channel.presentation.unit ?? i18n.t("unit ?");
           next.push({
             id: `channel:${grid.instanceId}:${channel.pdvObjectUid}:${channel.pdvIndex}`,
-            label: `DDI ${channel.ddiDisplay} · ${channel.productName ?? "Unresolved product"}`,
-            meta: `${channel.presentation.unit ?? "unit ?"} · PDV ${channel.pdvIndex + 1}`,
-            hoverLabel: `DDI ${channel.ddiDisplay} · ${channel.ddiName}\nProduct: ${channel.productName ?? "Unresolved product"}\n${channel.presentation.unit ?? "Unit unknown"} · PDV ${channel.pdvIndex + 1}`,
+            label: `DDI ${channel.ddiDisplay} · ${productLabel}`,
+            meta: `${unitLabel} · PDV ${channel.pdvIndex + 1}`,
+            hoverLabel: `DDI ${channel.ddiDisplay} · ${channel.ddiName}\n${i18n.t("Product")}: ${productLabel}\n${channel.presentation.unit ?? i18n.t("Unit unknown")} · PDV ${channel.pdvIndex + 1}`,
             depth: 5,
             kind: "channel",
             dataScope: "planned",
@@ -587,9 +610,9 @@ export function DatasetTree({
             warning: channel.presentation.confidence !== "declared",
             warningMessage:
               channel.presentation.confidence === "missing"
-                ? "The value presentation is missing; raw values are still available."
+                ? i18n.t("The value presentation is missing; raw values are still available.")
                 : channel.presentation.confidence === "invalid"
-                  ? "The declared value presentation is invalid."
+                  ? i18n.t("The declared value presentation is invalid.")
                   : undefined,
             parentId: `grid:${grid.instanceId}`,
             spatial: true,
@@ -605,10 +628,10 @@ export function DatasetTree({
       ) {
         next.push({
           id: `executed:${task.instanceId}`,
-          label: "Executed data",
+          label: i18n.t("Executed data"),
           meta: taskTimeLogs.length
-            ? `${taskTimeLogs.length} ${taskTimeLogs.length === 1 ? "log" : "logs"}`
-            : "Unavailable",
+            ? i18n.t("counts.logs", { count: taskTimeLogs.length })
+            : i18n.t("Unavailable"),
           depth: 3,
           kind: "section",
           dataScope: "executed",
@@ -622,9 +645,11 @@ export function DatasetTree({
             label: timeLog.id,
             meta:
               timeLog.adapterSelection.mode === "unresolved"
-                ? "Choose adapter"
-                : `${timeLog.decodedRecordCount.toLocaleString()} records`,
-            hoverLabel: `${timeLog.adapterSelection.adapterLabel ?? "No adapter selected"}\n${timeLog.adapterSelection.reason}`,
+                ? i18n.t("Choose adapter")
+                : i18n.t("counts.records", {
+                    count: timeLog.decodedRecordCount,
+                  }),
+            hoverLabel: `${timeLog.adapterSelection.adapterLabel ?? i18n.t("No adapter selected")}\n${timeLog.adapterSelection.reason}`,
             depth: 4,
             kind: "timelog",
             dataScope: "executed",
@@ -640,7 +665,7 @@ export function DatasetTree({
                 ? timeLog.adapterSelection.reason
                 : (timeLog.validationIssues.find(
                     (entry) => entry.severity !== "info",
-                  )?.message ?? "This time log has validation issues."),
+                  )?.message ?? i18n.t("This time log has validation issues.")),
             parentId: `executed:${task.instanceId}`,
             spatial: true,
           });
@@ -651,11 +676,17 @@ export function DatasetTree({
               channel,
               deviceClassesByDdi[String(channel.ddi)] ?? [],
             );
+            const unitLabel = channel.unit ?? i18n.t("unit ?");
+            const deviceElementLabel =
+              channel.deviceElementName ?? i18n.t("Unresolved element");
+            const deviceLabel = channel.deviceName ?? i18n.t("Unresolved");
             next.push({
               id: `timelog-channel:${timeLog.instanceId}:${channel.channelId}`,
-              label: executedChannelTreeLabel(channel),
-              meta: `${channel.unit ?? "unit ?"} · ${presentCount ?? 0} values`,
-              hoverLabel: `DDI ${channel.ddiDisplay} · ${channel.ddiName}\nDevice element: ${channel.deviceElementName ?? "Unresolved element"}\nDevice: ${channel.deviceName ?? "Unresolved"}\n${channel.presentation.unit ?? "Unit unknown"}`,
+              label: executedChannelTreeLabel(channel, i18n.t("Unknown DDI")),
+              meta: `${unitLabel} · ${i18n.t("counts.values", {
+                count: presentCount,
+              })}`,
+              hoverLabel: `DDI ${channel.ddiDisplay} · ${channel.ddiName}\n${i18n.t("Device element")}: ${deviceElementLabel}\n${i18n.t("Device")}: ${deviceLabel}\n${channel.presentation.unit ?? i18n.t("Unit unknown")}`,
               depth: 5,
               kind: "channel",
               dataScope: "executed",
@@ -668,9 +699,9 @@ export function DatasetTree({
               warning: channel.presentation.confidence !== "declared",
               warningMessage:
                 channel.presentation.confidence === "missing"
-                  ? "The device value presentation is missing; raw values remain available."
+                  ? i18n.t("The device value presentation is missing; raw values remain available.")
                   : channel.presentation.confidence === "invalid"
-                    ? "The declared device value presentation is invalid."
+                    ? i18n.t("The declared device value presentation is invalid.")
                     : undefined,
               parentId: `timelog:${timeLog.instanceId}`,
               spatial: true,
@@ -680,8 +711,8 @@ export function DatasetTree({
       }
       next.push({
         id: `devices:${task.instanceId}`,
-        label: "Machines & device elements",
-        meta: `${dataset.objects.filter((object) => object.elementType === "DET").length} DET`,
+        label: i18n.t("Machines & device elements"),
+        meta: `${i18n.formatInteger(dataset.objects.filter((object) => object.elementType === "DET").length)} DET`,
         depth: 3,
         kind: "device",
         parentId: `task:${task.instanceId}`,
@@ -690,21 +721,28 @@ export function DatasetTree({
     }
     next.push({
       id: "files",
-      label: "Files",
-      meta: String(dataset.files.length),
+      label: i18n.t("Files"),
+      meta: i18n.formatInteger(dataset.files.length),
       depth: 1,
       kind: "file",
       parentId: "dataset",
     });
     next.push({
       id: "unknown",
-      label: "Unknown / unsupported",
+      label: i18n.t("Unknown / unsupported"),
       meta: unknownCount
-        ? `${unknownCount} ${unknownCount === 1 ? "group" : "groups"}`
+        ? i18n.t("counts.groups", { count: unknownCount })
         : "0",
       depth: 1,
       kind: "section",
-      warningMessage: `${unknownCount} unsupported type/file ${unknownCount === 1 ? "group is" : "groups are"} available in the preserved Raw source.`,
+      warningMessage: i18n.t(
+        "{groups} are available in the preserved Raw source.",
+        {
+          groups: i18n.t("counts.unsupportedGroups", {
+            count: unknownCount,
+          }),
+        },
+      ),
       parentId: "dataset",
     });
     const parentIds = new Set(
@@ -714,7 +752,7 @@ export function DatasetTree({
       ...node,
       hasChildren: parentIds.has(node.id),
     }));
-  }, [channelMetricsById, dataset, deviceClassesByDdi]);
+  }, [channelMetricsById, dataset, deviceClassesByDdi, i18n]);
 
   const nodes = useMemo(() => {
     const byId = new Map(allNodes.map((node) => [node.id, node]));
@@ -1005,18 +1043,18 @@ export function DatasetTree({
   return (
     <aside
       className={`left-panel ${executedChannels.length ? "has-executed-filters" : ""}`}
-      aria-label="Dataset navigation"
+      aria-label={i18n.t("Dataset navigation")}
     >
       <div className="panel-heading">
         <div>
-          <small>OBJECT BROWSER</small>
-          <h2>Dataset navigator</h2>
+          <small>{i18n.t("Object browser").toUpperCase()}</small>
+          <h2>{i18n.t("Dataset navigator")}</h2>
         </div>
         <button
           className="panel-reset-button"
           type="button"
-          aria-label="Clear dataset search and tree filters"
-          title="Clear search, data scope, operation, DDI, Issues and Spatial filters"
+          aria-label={i18n.t("Clear dataset search and tree filters")}
+          title={i18n.t("Clear search, data scope, operation, DDI, Issues and Spatial filters")}
           disabled={!hasActiveFilter}
           onClick={() => {
             setFilterMode("all");
@@ -1028,30 +1066,30 @@ export function DatasetTree({
           }}
         >
           <FilterX size={13} />
-          <span>CLEAR FILTERS</span>
+          <span>{i18n.t("Clear filters").toUpperCase()}</span>
         </button>
       </div>
       <div className="dataset-search-row">
         <label className="dataset-search">
           <Search size={15} aria-hidden="true" />
-          <span className="sr-only">Search dataset navigator</span>
+          <span className="sr-only">{i18n.t("Search dataset navigator")}</span>
           <input
             ref={searchInputRef}
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Search IDs, products, DDI, files…"
+            placeholder={i18n.t("Search IDs, products, DDI, files…")}
           />
           <kbd>Ctrl K</kbd>
         </label>
       </div>
       {executedChannels.length > 0 && (
-        <div className="executed-filter-row" aria-label="Executed DDI filters">
-          <label title="Show the DDIs usually associated with an operation">
+        <div className="executed-filter-row" aria-label={i18n.t("Executed DDI filters")}>
+          <label title={i18n.t("Show the DDIs usually associated with an operation")}>
             <ListFilter size={13} aria-hidden="true" />
-            <span className="sr-only">Executed operation group</span>
+            <span className="sr-only">{i18n.t("Executed operation group")}</span>
             <select
               value={operationFilter}
-              aria-label="Filter executed DDIs by operation group"
+              aria-label={i18n.t("Filter executed DDIs by operation group")}
               onChange={(event) => {
                 setOperationFilter(
                   event.target.value as "all" | OperationGroupId,
@@ -1060,30 +1098,30 @@ export function DatasetTree({
               }}
             >
               <option value="all">
-                All operations · {executedChannels.length}
+                {i18n.t("All operations")} · {executedChannels.length}
               </option>
               {OPERATION_GROUPS.map((group) => {
                 const count = operationCounts.get(group.id) ?? 0;
                 return (
                   <option key={group.id} value={group.id} disabled={!count}>
-                    {group.label} · {count}
+                    {i18n.t(group.label)} · {i18n.formatInteger(count)}
                   </option>
                 );
               })}
             </select>
           </label>
-          <label title="Show every device element that records one DDI">
+          <label title={i18n.t("Show every device element that records one DDI")}>
             <Layers3 size={13} aria-hidden="true" />
-            <span className="sr-only">Individual executed DDI</span>
+            <span className="sr-only">{i18n.t("Individual executed DDI")}</span>
             <select
               value={ddiFilter}
-              aria-label="Filter executed channels by individual DDI"
+              aria-label={i18n.t("Filter executed channels by individual DDI")}
               onChange={(event) => {
                 setDdiFilter(event.target.value);
                 setOperationFilter("all");
               }}
             >
-              <option value="all">All DDIs · {ddiOptions.length}</option>
+              <option value="all">{i18n.t("All DDIs")} · {ddiOptions.length}</option>
               {ddiOptions.map((entry) => (
                 <option key={entry.display} value={entry.display}>
                   DDI {entry.display} · {entry.name} · {entry.count}
@@ -1103,7 +1141,7 @@ export function DatasetTree({
           }
         >
           <AlertTriangle size={13} />
-          Issues
+          {i18n.t("Issues")}
         </button>
         <button
           type="button"
@@ -1114,32 +1152,32 @@ export function DatasetTree({
           }
         >
           <MapIcon size={13} />
-          Spatial
+          {i18n.t("Spatial")}
         </button>
         <label
           className={`tree-scope-filter ${dataScope !== "both" ? "active" : ""}`}
-          title="Show planned data, executed data, or both"
+          title={i18n.t("Show planned data, executed data, or both")}
         >
-          <span className="sr-only">Data scope</span>
+          <span className="sr-only">{i18n.t("Data scope")}</span>
           <select
             value={dataScope}
-            aria-label="Filter dataset tree by planned or executed data"
+            aria-label={i18n.t("Filter dataset tree by planned or executed data")}
             onChange={(event) =>
               setDataScope(event.target.value as TreeDataScope)
             }
           >
-            <option value="both">Both</option>
-            <option value="planned">Planned</option>
-            <option value="executed">Executed</option>
+            <option value="both">{i18n.t("Both")}</option>
+            <option value="planned">{i18n.t("Planned")}</option>
+            <option value="executed">{i18n.t("Executed")}</option>
           </select>
         </label>
         <details className="channel-quality-menu">
           <summary
             className={qualityFilterActive ? "active" : ""}
-            aria-label="Configure executed channel quality filters"
+            aria-label={i18n.t("Configure executed channel quality filters")}
           >
             <SlidersHorizontal size={13} />
-            Quality
+            {i18n.t("Quality")}
             {hiddenByQualityCount > 0 && <b>{hiddenByQualityCount}</b>}
           </summary>
           <div className="channel-quality-popover">
@@ -1152,7 +1190,7 @@ export function DatasetTree({
                   setDdiFilter("all");
                 }}
               >
-                Useful defaults
+                {i18n.t("Useful defaults")}
               </button>
               <button
                 type="button"
@@ -1162,7 +1200,7 @@ export function DatasetTree({
                   setDdiFilter("all");
                 }}
               >
-                Show all
+                {i18n.t("Show all")}
               </button>
             </div>
             <div className="quality-filter-list">
@@ -1181,15 +1219,17 @@ export function DatasetTree({
               ))}
             </div>
             <p>
-              {qualityVisibleChannels.length} of {executedChannels.length}{" "}
-              executed channels shown
+              {qualityVisibleChannels.length} {i18n.t("of")} {executedChannels.length}{" "}
+              {i18n.t("executed channels shown")}
             </p>
           </div>
         </details>
         <button
           type="button"
           aria-label={
-            collapsed.size ? "Expand all tree nodes" : "Collapse all tree nodes"
+            collapsed.size
+              ? i18n.t("Expand all tree nodes")
+              : i18n.t("Collapse all tree nodes")
           }
           onClick={() =>
             setCollapsed(collapsed.size ? new Set() : new Set(expandableIds))
@@ -1200,7 +1240,7 @@ export function DatasetTree({
           ) : (
             <ChevronRight size={13} />
           )}
-          {collapsed.size ? "Expand" : "Collapse"}
+          {collapsed.size ? i18n.t("Expand") : i18n.t("Collapse")}
         </button>
       </div>
       <div className="tree-scroll" ref={scrollRef}>
@@ -1209,7 +1249,7 @@ export function DatasetTree({
             className="tree-virtual-space"
             style={{ height: virtualizer.getTotalSize() }}
             role="tree"
-            aria-label="ISOXML objects"
+            aria-label={i18n.t("ISOXML objects")}
           >
             {virtualizer.getVirtualItems().map((virtualRow) => {
               const node = nodes[virtualRow.index];
@@ -1271,15 +1311,15 @@ export function DatasetTree({
         ) : (
           <div className="tree-empty">
             <SearchX size={20} />
-            No matching objects
+            {i18n.t("No matching objects")}
           </div>
         )}
       </div>
       <div className="panel-footer">
         <FileArchive size={13} />
-        <span>{formatMemorySize(dataset.memoryBytes)} in memory</span>
+        <span>{formatMemorySize(dataset.memoryBytes, locale)} {i18n.t("in memory")}</span>
         <span className="footer-dot" />
-        <span>local only</span>
+        <span>{i18n.t("local only")}</span>
       </div>
     </aside>
   );

@@ -45,6 +45,7 @@ import type {
   IsoXmlDataset,
   SpatialBoundary,
 } from "@/lib/isoxml/types";
+import { createI18n, type I18n } from "@/lib/client/i18n";
 import { useViewerStore } from "./store";
 import { buildMapGridRaster, type MapGridRaster } from "./map-rendering";
 import { drawMapScreenshotTooltip } from "./map-screenshot";
@@ -77,9 +78,13 @@ function formatCellLength(length: number): string {
   return length.toFixed(2).replace(/\.?0+$/, "");
 }
 
-function formatMapStatistic(value: number, preferredDecimals: number): string {
+function formatMapStatistic(
+  value: number,
+  preferredDecimals: number,
+  locale: string,
+): string {
   const decimals = Math.min(4, Math.max(0, preferredDecimals));
-  return value.toLocaleString("en-US", {
+  return value.toLocaleString(locale, {
     maximumFractionDigits: decimals,
     minimumFractionDigits: Math.min(2, decimals),
   });
@@ -120,14 +125,18 @@ function colorFor(
   return classIndex === undefined ? "#3c4541" : classColors[classIndex];
 }
 
-function scaleDescription(classification: ValueClassification): string {
-  if (!classification.classCount) return "No numeric values";
-  const classLabel = classification.classCount === 1 ? "class" : "classes";
-  const method =
+function scaleDescription(
+  classification: ValueClassification,
+  i18n: I18n,
+): string {
+  if (!classification.classCount) return i18n.t("No numeric values");
+  return `${
     classification.mode === "distinct-values"
-      ? "Distinct values"
-      : "Equal interval";
-  return `${method} · ${classification.classCount} ${classLabel}`;
+      ? i18n.t("Distinct values")
+      : i18n.t("Equal interval")
+  } · ${i18n.formatInteger(classification.classCount)} ${i18n.t(
+    classification.classCount === 1 ? "class" : "classes",
+  )}`;
 }
 
 function fieldBoundaryForGrid(
@@ -190,6 +199,7 @@ function fittedCanvasText(
 function drawExportLegend(
   context: CanvasRenderingContext2D,
   width: number,
+  i18n: I18n,
   channel: GridChannel,
   min: number,
   max: number,
@@ -221,14 +231,14 @@ function drawExportLegend(
   context.fillStyle = "#8f9d96";
   context.font = '8px Consolas, "SFMono-Regular", monospace';
   context.textBaseline = "top";
-  context.fillText("PLANNED · ACTIVE", innerX + 14, y + 13);
+  context.fillText(i18n.t("Planned · active").toUpperCase(), innerX + 14, y + 13);
 
   context.fillStyle = "#dce5df";
   context.font = "600 14px Inter, Arial, sans-serif";
   context.fillText(
     fittedCanvasText(
       context,
-      channel.productName ?? "Product unresolved",
+      channel.productName ?? i18n.t("Product unresolved"),
       innerWidth,
     ),
     innerX,
@@ -277,7 +287,11 @@ function drawExportLegend(
   context.fillStyle = "#c9d5ce";
   context.textAlign = "center";
   context.fillText(
-    fittedCanvasText(context, channel.unit ?? "unit unknown", innerWidth / 2),
+    fittedCanvasText(
+      context,
+      channel.unit ?? i18n.t("unit unknown"),
+      innerWidth / 2,
+    ),
     innerX + innerWidth / 2,
     rampY + 13,
   );
@@ -325,6 +339,8 @@ interface MapWorkspaceProps {
 }
 
 export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
+  const locale = useViewerStore((state) => state.locale);
+  const i18n = createI18n(locale);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | undefined>(undefined);
   const mapReadyRef = useRef(false);
@@ -355,7 +371,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
   const [liveCoordinate, setLiveCoordinate] = useState(() =>
     isSpatialGridValid(grid)
       ? `${grid.origin.latitude.toFixed(6)}, ${grid.origin.longitude.toFixed(6)}`
-      : "Coordinates unavailable",
+      : i18n.t("Coordinates unavailable"),
   );
   const [pinnedCoordinate, setPinnedCoordinate] = useState<string>();
   const [pinnedScreenPosition, setPinnedScreenPosition] = useState<{
@@ -545,7 +561,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
       valueClassification,
     ],
   );
-  const scaleLabel = scaleDescription(valueClassification);
+  const scaleLabel = scaleDescription(valueClassification, i18n);
   const min = valueClassification.min;
   const max = valueClassification.max;
   const zeroCount = zeroCells.filter(
@@ -580,6 +596,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
       : `${formatMapStatistic(
           doseStatistics.average,
           channel.presentation.decimals,
+          locale,
         )}${doseStatistics.averageUnit ? ` ${doseStatistics.averageUnit}` : ""}`;
   const totalDose =
     doseStatistics.total === undefined
@@ -587,6 +604,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
       : `${formatMapStatistic(
           doseStatistics.total,
           channel.presentation.decimals,
+          locale,
         )}${doseStatistics.totalUnit ? ` ${doseStatistics.totalUnit}` : ""}`;
   const hoveredRawValue =
     hoveredCellIndex !== undefined
@@ -640,7 +658,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
           bottomRight.y - topLeft.y,
         );
         if (renderModeLabelRef.current) {
-          renderModeLabelRef.current.textContent = "RASTER";
+          renderModeLabelRef.current.textContent = i18n.t("Raster");
         }
       } else {
         const mapBounds = map.getBounds();
@@ -665,8 +683,10 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
         if (renderModeLabelRef.current) {
           renderModeLabelRef.current.textContent =
             renderStride > 1
-              ? `SAMPLED ${renderStride}×${renderStride}`
-              : "CANVAS";
+              ? i18n.t("Sampled {stride}×{stride}", {
+                  stride: renderStride,
+                })
+              : i18n.t("Canvas");
         }
         for (
           let row = visibleRange?.firstRow ?? 0;
@@ -783,6 +803,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
       gridRaster,
       hiddenCellMask,
       classColors,
+      i18n,
       noDataCells,
       numericValueByCell,
       selectedCellIndex,
@@ -844,7 +865,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
       setLiveCoordinate(
         isSpatialGridValid(activeGrid)
           ? `${activeGrid.origin.latitude.toFixed(6)}, ${activeGrid.origin.longitude.toFixed(6)}`
-          : "Coordinates unavailable",
+          : i18n.t("Coordinates unavailable"),
       );
       const map = leaflet.map(containerRef.current, {
         zoomControl: false,
@@ -1049,6 +1070,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
     };
   }, [
     clearPinnedCoordinate,
+    i18n,
     setHoveredCell,
     setPinPlacementMode,
     setSelectedCell,
@@ -1059,7 +1081,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
       setLiveCoordinate(
         spatiallyValid
           ? `${grid.origin.latitude.toFixed(6)}, ${grid.origin.longitude.toFixed(6)}`
-          : "Coordinates unavailable",
+          : i18n.t("Coordinates unavailable"),
       );
       clearPinnedCoordinate();
       setPinPlacementMode(false);
@@ -1071,6 +1093,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
     fitGrid,
     grid.origin.latitude,
     grid.origin.longitude,
+    i18n,
     setPinPlacementMode,
     spatiallyValid,
   ]);
@@ -1180,6 +1203,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
       drawExportLegend(
         context,
         size.x,
+        i18n,
         channel,
         min,
         max,
@@ -1215,13 +1239,15 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
               formattedValue: selectedValue.formattedValue,
               unit: channel.unit,
               rows: [
-                { label: "Raw", value: String(selectedValue.rawValue) },
+                { label: i18n.t("Raw"), value: String(selectedValue.rawValue) },
                 {
-                  label: "Layout",
+                  label: i18n.t("Layout"),
                   value:
                     grid.gridType === 2
-                      ? "Direct"
-                      : `Zone ${grid.treatmentZoneCodes[selectedCellIndex]}`,
+                      ? i18n.t("Direct")
+                      : i18n.t("Zone {zone}", {
+                          zone: grid.treatmentZoneCodes[selectedCellIndex],
+                        }),
                 },
                 {
                   label: "PDV",
@@ -1276,8 +1302,10 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
       console.error("Map export failed.", error);
       setMapExportError(
         baseLayer === "none"
-          ? "The map image could not be exported."
-          : "The browser blocked pixels from the background map. Choose No background and try again.",
+          ? i18n.t("The map image could not be exported.")
+          : i18n.t(
+              "The browser blocked pixels from the background map. Choose No background and try again.",
+            ),
       );
     }
   };
@@ -1310,7 +1338,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
   return (
     <main
       className={`map-workspace${pinPlacementActive ? " pin-placement-active" : ""}`}
-      aria-label="Interactive ISOXML map"
+      aria-label={i18n.t("Interactive ISOXML map")}
     >
       <div
         className="map-container"
@@ -1321,18 +1349,18 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
         <button
           type="button"
           onClick={() => mapRef.current?.zoomIn(ZOOM_STEP, { animate: false })}
-          aria-label="Zoom in"
-          title="Zoom in"
-          data-tooltip="Zoom in"
+          aria-label={i18n.t("Zoom in")}
+          title={i18n.t("Zoom in")}
+          data-tooltip={i18n.t("Zoom in")}
         >
           <Plus size={16} />
         </button>
         <button
           type="button"
           onClick={() => mapRef.current?.zoomOut(ZOOM_STEP, { animate: false })}
-          aria-label="Zoom out"
-          title="Zoom out"
-          data-tooltip="Zoom out"
+          aria-label={i18n.t("Zoom out")}
+          title={i18n.t("Zoom out")}
+          data-tooltip={i18n.t("Zoom out")}
         >
           <Minus size={16} />
         </button>
@@ -1340,9 +1368,9 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
         <button
           type="button"
           onClick={fitGrid}
-          aria-label="Fit active grid to the map"
-          title="Fit active grid to the map"
-          data-tooltip="Fit active grid to the map"
+          aria-label={i18n.t("Fit active grid to the map")}
+          title={i18n.t("Fit active grid to the map")}
+          data-tooltip={i18n.t("Fit active grid to the map")}
         >
           <Crosshair size={16} />
         </button>
@@ -1352,19 +1380,19 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
           onClick={() => setPinPlacementMode(!pinPlacementActive)}
           aria-label={
             pinPlacementActive
-              ? "Cancel coordinate pin placement"
-              : "Place a coordinate pin"
+              ? i18n.t("Cancel coordinate pin placement")
+              : i18n.t("Place a coordinate pin")
           }
           aria-pressed={pinPlacementActive}
           title={
             pinPlacementActive
-              ? "Cancel coordinate pin placement"
-              : "Place a coordinate pin on empty map space"
+              ? i18n.t("Cancel coordinate pin placement")
+              : i18n.t("Place a coordinate pin on empty map space")
           }
           data-tooltip={
             pinPlacementActive
-              ? "Cancel coordinate pin placement"
-              : "Place a coordinate pin"
+              ? i18n.t("Cancel coordinate pin placement")
+              : i18n.t("Place a coordinate pin")
           }
         >
           <MapPin size={16} />
@@ -1373,10 +1401,10 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
           <button
             type="button"
             className={activeDisplayFilterCount ? "active" : ""}
-            aria-label={`Configure map display filters${activeDisplayFilterCount ? `: ${activeDisplayFilterCount} active` : ""}`}
+            aria-label={`${i18n.t("Configure map display filters")}${activeDisplayFilterCount ? `: ${activeDisplayFilterCount} ${i18n.t("active")}` : ""}`}
             aria-expanded={displayFilterMenuOpen}
-            title={`Map display filters${activeDisplayFilterCount ? ` (${activeDisplayFilterCount} active)` : ""}`}
-            data-tooltip={`Map display filters${activeDisplayFilterCount ? ` (${activeDisplayFilterCount} active)` : ""}`}
+            title={`${i18n.t("Map display filters")}${activeDisplayFilterCount ? ` (${activeDisplayFilterCount} ${i18n.t("active")})` : ""}`}
+            data-tooltip={`${i18n.t("Map display filters")}${activeDisplayFilterCount ? ` (${activeDisplayFilterCount} ${i18n.t("active")})` : ""}`}
             onClick={() => {
               setDisplayFilterMenuOpen((open) => !open);
               setBaseLayerMenuOpen(false);
@@ -1388,7 +1416,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
             <div
               className="map-filter-menu"
               role="menu"
-              aria-label="Map display filters"
+              aria-label={i18n.t("Map display filters")}
             >
               <button
                 type="button"
@@ -1399,8 +1427,8 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
               >
                 <EyeOff size={14} aria-hidden="true" />
                 <span>
-                  <strong>Hide empty cells</strong>
-                  <small>Zero and no-data values</small>
+                  <strong>{i18n.t("Hide empty cells")}</strong>
+                  <small>{i18n.t("Zero and no-data values")}</small>
                 </span>
                 {hideEmptyCells && <Check size={14} aria-hidden="true" />}
               </button>
@@ -1414,9 +1442,9 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
               >
                 <Crop size={14} aria-hidden="true" />
                 <span>
-                  <strong>Cut to field</strong>
+                  <strong>{i18n.t("Cut to field")}</strong>
                   <small>
-                    {fieldBoundary?.name ?? "No field boundary available"}
+                    {fieldBoundary?.name ?? i18n.t("No field boundary available")}
                   </small>
                 </span>
                 {fieldClipActive && <Check size={14} aria-hidden="true" />}
@@ -1430,11 +1458,11 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
               >
                 <Filter size={14} aria-hidden="true" />
                 <span>
-                  <strong>Hide outliers</strong>
-                  <small title="Extreme values beyond 3× IQR, with a minimum 50% typical-value guard">
+                  <strong>{i18n.t("Hide outliers")}</strong>
+                  <small title={i18n.t("Extreme values beyond 3× IQR, with a minimum 50% typical-value guard")}>
                     {outlierCount
-                      ? `${outlierCount} extreme · conservative 3× IQR`
-                      : "None detected · conservative 3× IQR"}
+                      ? `${i18n.formatInteger(outlierCount)} ${i18n.t("extreme")} · ${i18n.t("conservative 3× IQR")}`
+                      : i18n.t("None detected · conservative 3× IQR")}
                   </small>
                 </span>
                 {hideOutliers && <Check size={14} aria-hidden="true" />}
@@ -1449,11 +1477,11 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
               setBaseLayerMenuOpen((open) => !open);
               setDisplayFilterMenuOpen(false);
             }}
-            aria-label="Choose background map"
+            aria-label={i18n.t("Choose background map")}
             aria-expanded={baseLayerMenuOpen}
             className={baseLayer !== "none" ? "active" : ""}
-            title="Choose background map (tiles may load over the network)"
-            data-tooltip="Choose background map"
+            title={i18n.t("Choose background map (tiles may load over the network)")}
+            data-tooltip={i18n.t("Choose background map")}
           >
             <Layers size={16} />
           </button>
@@ -1461,13 +1489,13 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
             <div
               className="basemap-menu"
               role="menu"
-              aria-label="Background map"
+              aria-label={i18n.t("Background map")}
             >
               {(
                 [
-                  ["none", "No background"],
-                  ["streets", "Streets"],
-                  ["satellite", "Satellite"],
+                  ["none", i18n.t("No background")],
+                  ["streets", i18n.t("Streets")],
+                  ["satellite", i18n.t("Satellite")],
                 ] as const
               ).map(([id, label]) => (
                 <button
@@ -1482,7 +1510,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
                   }}
                 >
                   <span>{label}</span>
-                  {baseLayer === id && <b>ON</b>}
+                  {baseLayer === id && <b>{i18n.t("On").toUpperCase()}</b>}
                 </button>
               ))}
             </div>
@@ -1491,9 +1519,9 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
         <button
           type="button"
           onClick={() => void exportMap()}
-          aria-label="Export map screenshot"
-          title="Export map screenshot"
-          data-tooltip="Export map screenshot"
+          aria-label={i18n.t("Export map screenshot")}
+          title={i18n.t("Export map screenshot")}
+          data-tooltip={i18n.t("Export map screenshot")}
         >
           <Scan size={16} />
         </button>
@@ -1501,16 +1529,16 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
 
       <div className="map-badge top-center">
         <span className="pulse-dot" />
-        TYPE {grid.gridType} · {grid.decodedCellCount.toLocaleString()} CELLS ·{" "}
-        <span ref={renderModeLabelRef}>CANVAS</span>
+        {i18n.t("Type").toUpperCase()} {grid.gridType} · {i18n.formatInteger(grid.decodedCellCount)} {i18n.t("Cells").toUpperCase()} ·{" "}
+        <span ref={renderModeLabelRef}>{i18n.t("Canvas")}</span>
       </div>
 
       {!spatiallyValid && (
         <div className="map-spatial-error" role="status">
           <AlertTriangle size={18} />
           <div>
-            <strong>Grid coordinates are invalid</strong>
-            <span>The values remain available in the table and inspector.</span>
+            <strong>{i18n.t("Grid coordinates are invalid")}</strong>
+            <span>{i18n.t("The values remain available in the table and inspector.")}</span>
           </div>
         </div>
       )}
@@ -1520,17 +1548,17 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
           <AlertTriangle size={15} />
           <span>{mapExportError}</span>
           <button type="button" onClick={() => setMapExportError(undefined)}>
-            Dismiss
+            {i18n.t("Dismiss")}
           </button>
         </div>
       )}
 
-      <section className="map-legend" aria-label="Active layer legend">
+      <section className="map-legend" aria-label={i18n.t("Active layer legend")}>
         <div className="legend-kicker">
           <span className="layer-swatch" />
-          PLANNED · ACTIVE
+          {i18n.t("Planned · active").toUpperCase()}
         </div>
-        <h2>{channel.productName ?? "Product unresolved"}</h2>
+        <h2>{channel.productName ?? i18n.t("Product unresolved")}</h2>
         <p>
           DDI {channel.ddiDisplay} · {channel.ddiName}
         </p>
@@ -1541,40 +1569,40 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
         </div>
         <div className="legend-range">
           <span>{min.toFixed(channel.presentation.decimals)}</span>
-          <strong>{channel.unit ?? "unit unknown"}</strong>
+          <strong>{channel.unit ?? i18n.t("unit unknown")}</strong>
           <span>{max.toFixed(channel.presentation.decimals)}</span>
         </div>
         <dl>
           <div>
-            <dt>Scale</dt>
+            <dt>{i18n.t("Scale")}</dt>
             <dd>{scaleLabel}</dd>
           </div>
           {averageDose && (
             <div>
-              <dt>Average dose</dt>
+              <dt>{i18n.t("Average dose")}</dt>
               <dd>{averageDose}</dd>
             </div>
           )}
           {totalDose && (
             <div>
-              <dt>Total dose</dt>
+              <dt>{i18n.t("Total dose")}</dt>
               <dd>{totalDose}</dd>
             </div>
           )}
           <div>
-            <dt>Visible / filtered</dt>
+            <dt>{i18n.t("Visible / filtered")}</dt>
             <dd>
-              {visibleCellCount} / {filteredCellCount}
+              {i18n.formatInteger(visibleCellCount)} / {i18n.formatInteger(filteredCellCount)}
             </dd>
           </div>
           <div>
-            <dt>Zero / no-data</dt>
+            <dt>{i18n.t("Zero / no-data")}</dt>
             <dd>
-              {zeroCount} / {noDataCount}
+              {i18n.formatInteger(zeroCount)} / {i18n.formatInteger(noDataCount)}
             </dd>
           </div>
           <div>
-            <dt>Source</dt>
+            <dt>{i18n.t("Source")}</dt>
             <dd>{grid.filename}</dd>
           </div>
         </dl>
@@ -1598,15 +1626,17 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
           </div>
           <dl>
             <div>
-              <dt>Raw</dt>
+              <dt>{i18n.t("Raw")}</dt>
               <dd>{hoveredValue.rawValue}</dd>
             </div>
             <div>
-              <dt>Layout</dt>
+              <dt>{i18n.t("Layout")}</dt>
               <dd>
                 {grid.gridType === 2
-                  ? "Direct"
-                  : `Zone ${grid.treatmentZoneCodes[hoveredCellIndex ?? 0]}`}
+                  ? i18n.t("Direct")
+                  : i18n.t("Zone {zone}", {
+                      zone: grid.treatmentZoneCodes[hoveredCellIndex ?? 0],
+                    })}
               </dd>
             </div>
             <div>
@@ -1617,7 +1647,7 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
             </div>
           </dl>
           <span className="tooltip-hint">
-            Click to select this cell and show its coordinate
+            {i18n.t("Click to select this cell and show its coordinate")}
           </span>
         </div>
       )}
@@ -1630,8 +1660,8 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
             left: pinnedScreenPosition.x,
             top: pinnedScreenPosition.y,
           }}
-          aria-label={`Remove pinned coordinate ${pinnedCoordinate}`}
-          title="Remove pinned coordinate"
+          aria-label={`${i18n.t("Remove pinned coordinate")} ${pinnedCoordinate}`}
+          title={i18n.t("Remove pinned coordinate")}
           onClick={clearPinnedCoordinate}
         >
           <MapPin size={24} aria-hidden="true" />
@@ -1648,30 +1678,32 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
               void copyTextToClipboard(displayedCoordinate).then((copied) => {
                 if (!copied) {
                   setMapExportError(
-                    "The browser denied clipboard access. Select the coordinate text and copy it manually.",
+                    i18n.t(
+                      "The browser denied clipboard access. Select the coordinate text and copy it manually.",
+                    ),
                   );
                 }
               });
             }}
             title={
               selectedCoordinate
-                ? "Copy selected cell coordinate"
-                : "Copy pinned coordinate"
+                ? i18n.t("Copy selected cell coordinate")
+                : i18n.t("Copy pinned coordinate")
             }
           >
-            COPY
+            {i18n.t("Copy").toUpperCase()}
           </button>
         ) : (
           <small>
             {pinPlacementActive
-              ? "CLICK EMPTY MAP SPACE TO SET PIN"
-              : "CLICK A CELL TO SELECT · USE PIN TOOL FOR GPS"}
+              ? i18n.t("Click empty map space to set pin").toUpperCase()
+              : i18n.t("Click a cell to select · use pin tool for GPS").toUpperCase()}
           </small>
         )}
       </div>
       <div className="diagnostic-overlay">
         <ScanLine size={13} />
-        <span>Binary layout</span>
+        <span>{i18n.t("Binary layout")}</span>
         <strong>{grid.bytesPerCell} B/cell</strong>
         {cellAreaSquareMeters !== undefined && cellDimensionsMeters && (
           <>

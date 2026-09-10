@@ -264,6 +264,25 @@ test("uses one import control and keeps its label legible in light mode", async 
   );
 });
 
+test("switches the viewer language and persists it across reloads", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(
+    page.locator('.viewer-shell[data-interactive="true"]'),
+  ).toBeVisible();
+
+  await page.getByLabel("Choose interface language").selectOption("de");
+  await expect(page.getByText("Sprache")).toBeVisible();
+  await expect(page.getByText("Variante erstellen")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Validierungsbericht öffnen/i }),
+  ).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByText("Variante erstellen")).toBeVisible();
+});
+
 test("offers CSV and shapefile exports for the active planned channel", async ({
   page,
 }) => {

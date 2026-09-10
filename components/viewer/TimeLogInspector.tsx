@@ -11,6 +11,7 @@ import {
   Link2,
   MapPin,
 } from "lucide-react";
+import { createI18n } from "@/lib/client/i18n";
 import { decodeValue } from "@/lib/isoxml/value-decoder";
 import type {
   DecodedTimeLog,
@@ -22,8 +23,12 @@ import { TIME_LOG_INSPECTOR_TABS } from "./inspector-tabs";
 import { useViewerStore } from "./store";
 import { TimeLogAdapterControl } from "./TimeLogAdapterControl";
 
-function hexWindow(bytes: Uint8Array | undefined, offset: number): string {
-  if (!bytes) return "Binary source unavailable";
+function hexWindow(
+  bytes: Uint8Array | undefined,
+  offset: number,
+  unavailableLabel: string,
+): string {
+  if (!bytes) return unavailableLabel;
   const start = Math.max(0, offset - 8);
   const end = Math.min(bytes.byteLength, offset + 32);
   return Array.from(bytes.slice(start, end))
@@ -35,8 +40,11 @@ function hexWindow(bytes: Uint8Array | undefined, offset: number): string {
     .join(" ");
 }
 
-function objectName(object: IsoXmlObject | undefined): string {
-  if (!object) return "Unresolved";
+function objectName(
+  object: IsoXmlObject | undefined,
+  unresolvedLabel: string,
+): string {
+  if (!object) return unresolvedLabel;
   return (
     object.attributes.D ??
     object.attributes.E ??
@@ -61,6 +69,8 @@ export function TimeLogInspector({
   onSelectAdapter,
   adapterBusy,
 }: TimeLogInspectorProps) {
+  const locale = useViewerStore((state) => state.locale);
+  const i18n = createI18n(locale);
   const selectedRecordIndex = useViewerStore(
     (state) => state.selectedCellIndex,
   );
@@ -116,14 +126,18 @@ export function TimeLogInspector({
     (object) => object.uid === task?.objectUid,
   );
   const relationships: Array<[string, IsoXmlObject | undefined, string]> = [
-    ["TSK", taskObject, task?.name ?? "Task unresolved"],
+    ["TSK", taskObject, task?.name ?? i18n.t("Task unresolved")],
     ["TLG", declaration, timeLog.id],
-    ["DVC", device, channel.deviceName ?? "Machine unresolved"],
-    ["DET", deviceElement, channel.deviceElementName ?? "Element unresolved"],
+    ["DVC", device, channel.deviceName ?? i18n.t("Machine unresolved")],
+    [
+      "DET",
+      deviceElement,
+      channel.deviceElementName ?? i18n.t("Element unresolved"),
+    ],
     [
       processData?.elementType ?? "DPD/DPT",
       processData,
-      objectName(processData),
+      objectName(processData, i18n.t("Unresolved")),
     ],
     ["DVP", presentation, channel.presentation.source],
   ];
@@ -159,25 +173,25 @@ export function TimeLogInspector({
     .some(Boolean);
 
   return (
-    <aside className="right-panel" aria-label="Executed record inspector">
+    <aside className="right-panel" aria-label={i18n.t("Executed record inspector")}>
       <div className="inspector-heading">
         <div className="selection-icon executed">
           <MapPin size={16} />
         </div>
         <div>
-          <small>EXECUTED SELECTION</small>
-          <strong>Time-log record #{recordIndex + 1}</strong>
+          <small>{i18n.t("Executed selection").toUpperCase()}</small>
+          <strong>{i18n.t("Time-log record")} #{recordIndex + 1}</strong>
           <span>
             {Number.isFinite(timestamp)
-              ? new Date(timestamp).toLocaleString()
-              : "Timestamp unavailable"}
+              ? i18n.formatDateTime(timestamp)
+              : i18n.t("Timestamp unavailable")}
           </span>
         </div>
         <div className="selection-nav">
           <button
             type="button"
             onClick={() => navigate(-1)}
-            aria-label="Previous recorded value"
+            aria-label={i18n.t("Previous recorded value")}
             disabled={!hasPrevious}
           >
             <ArrowLeft size={14} />
@@ -185,7 +199,7 @@ export function TimeLogInspector({
           <button
             type="button"
             onClick={() => navigate(1)}
-            aria-label="Next recorded value"
+            aria-label={i18n.t("Next recorded value")}
             disabled={!hasNext}
           >
             <ArrowRight size={14} />
@@ -195,7 +209,7 @@ export function TimeLogInspector({
       <div
         className="inspector-tabs has-adapter"
         role="tablist"
-        aria-label="Inspector views"
+        aria-label={i18n.t("Inspector views")}
       >
         {TIME_LOG_INSPECTOR_TABS.map((tab) => (
           <button
@@ -206,7 +220,7 @@ export function TimeLogInspector({
             key={tab.id}
             onClick={() => setInspectorTab(tab.id)}
           >
-            {tab.label}
+            {i18n.t(tab.label)}
           </button>
         ))}
       </div>
@@ -215,9 +229,9 @@ export function TimeLogInspector({
           <>
             <section className="inspector-value-card executed">
               <div>
-                <small>SCALED EXECUTED VALUE</small>
+                <small>{i18n.t("Scaled executed value").toUpperCase()}</small>
                 <strong>
-                  {decoded?.formattedValue ?? "Not recorded"}
+                  {decoded?.formattedValue ?? i18n.t("Not recorded")}
                   <span>{channel.unit}</span>
                 </strong>
               </div>
@@ -227,40 +241,40 @@ export function TimeLogInspector({
                 ) : (
                   <AlertTriangle size={12} />
                 )}
-                {channel.presentation.confidence}
+                {i18n.t(channel.presentation.confidence)}
               </span>
               <div className="value-formula">
                 {decoded
                   ? `(${decoded.rawValue} + ${channel.presentation.offset}) × ${channel.presentation.scale}`
-                  : "Sparse DLV: this channel is absent from this record"}
+                  : i18n.t("Sparse DLV: this channel is absent from this record")}
               </div>
             </section>
             <section className="inspector-section">
               <div className="section-title">
-                <span>Recorded position</span>
+                <span>{i18n.t("Recorded position")}</span>
               </div>
               <dl className="property-list">
                 <div>
-                  <dt>Latitude</dt>
+                  <dt>{i18n.t("Latitude")}</dt>
                   <dd>{timeLog.latitudes[recordIndex]?.toFixed(7) ?? "—"}</dd>
                 </div>
                 <div>
-                  <dt>Longitude</dt>
+                  <dt>{i18n.t("Longitude")}</dt>
                   <dd>{timeLog.longitudes[recordIndex]?.toFixed(7) ?? "—"}</dd>
                 </div>
                 <div>
-                  <dt>Position status</dt>
+                  <dt>{i18n.t("Position status")}</dt>
                   <dd>{timeLog.positionStatus[recordIndex]}</dd>
                 </div>
                 <div>
-                  <dt>Valid for map</dt>
-                  <dd>{timeLog.validPositions[recordIndex] ? "yes" : "no"}</dd>
+                  <dt>{i18n.t("Valid for map")}</dt>
+                  <dd>{timeLog.validPositions[recordIndex] ? i18n.t("Yes") : i18n.t("No")}</dd>
                 </div>
               </dl>
             </section>
             <section className="inspector-section">
               <div className="section-title">
-                <span>Executed channel</span>
+                <span>{i18n.t("Executed channel")}</span>
               </div>
               <dl className="property-list">
                 <div>
@@ -270,15 +284,15 @@ export function TimeLogInspector({
                   </dd>
                 </div>
                 <div>
-                  <dt>Machine</dt>
-                  <dd>{channel.deviceName ?? "Unresolved"}</dd>
+                  <dt>{i18n.t("Machine")}</dt>
+                  <dd>{channel.deviceName ?? i18n.t("Unresolved")}</dd>
                 </div>
                 <div>
-                  <dt>Device element</dt>
-                  <dd>{channel.deviceElementName ?? "Unresolved"}</dd>
+                  <dt>{i18n.t("Device element")}</dt>
+                  <dd>{channel.deviceElementName ?? i18n.t("Unresolved")}</dd>
                 </div>
                 <div>
-                  <dt>Source</dt>
+                  <dt>{i18n.t("Source")}</dt>
                   <dd>{timeLog.filename}</dd>
                 </div>
               </dl>
@@ -288,31 +302,31 @@ export function TimeLogInspector({
         {inspectorTab === "attributes" && (
           <section className="inspector-section">
             <div className="section-title">
-              <span>Record attributes</span>
+              <span>{i18n.t("Record attributes")}</span>
             </div>
             <dl className="property-list code-list">
               <div>
-                <dt>RecordIndex</dt>
+                <dt>{i18n.t("Record index")}</dt>
                 <dd>{recordIndex}</dd>
               </div>
               <div>
-                <dt>Timestamp</dt>
+                <dt>{i18n.t("Timestamp")}</dt>
                 <dd>
                   {Number.isFinite(timestamp)
                     ? new Date(timestamp).toISOString()
-                    : "unavailable"}
+                    : i18n.t("unavailable")}
                 </dd>
               </div>
               <div>
-                <dt>DLVIndex</dt>
+                <dt>{i18n.t("DLV index")}</dt>
                 <dd>{channel.dlvIndex}</dd>
               </div>
               <div>
-                <dt>RawValue</dt>
-                <dd>{raw ?? "absent"}</dd>
+                <dt>{i18n.t("Raw value")}</dt>
+                <dd>{raw ?? i18n.t("absent")}</dd>
               </div>
               <div>
-                <dt>PositionStatus</dt>
+                <dt>{i18n.t("Position status")}</dt>
                 <dd>{timeLog.positionStatus[recordIndex]}</dd>
               </div>
             </dl>
@@ -321,7 +335,7 @@ export function TimeLogInspector({
         {inspectorTab === "relationships" && (
           <section className="inspector-section">
             <div className="section-title">
-              <span>Evidence chain</span>
+              <span>{i18n.t("Evidence chain")}</span>
             </div>
             <div className="relationship-list">
               {relationships.map(([type, object, description], index) => (
@@ -329,7 +343,7 @@ export function TimeLogInspector({
                   <Link2 size={13} />
                   <span>{type}</span>
                   <p>
-                    <strong>{object?.id ?? "unresolved"}</strong>
+                    <strong>{object?.id ?? i18n.t("Unresolved")}</strong>
                     <small>{description}</small>
                   </p>
                 </div>
@@ -341,22 +355,22 @@ export function TimeLogInspector({
           <>
             <section className="inspector-section">
               <div className="section-title">
-                <span>Binary record start</span>
+                <span>{i18n.t("Binary record start")}</span>
               </div>
               <div className="binary-offset">
                 <Clock3 size={14} />
                 <div>
-                  <span>Byte offset {binaryOffset}</span>
+                  <span>{i18n.t("Byte offset")} {binaryOffset}</span>
                   <small>{timeLog.filename}</small>
                 </div>
               </div>
               <pre className="hex-block">
-                {hexWindow(binaryBytes, binaryOffset)}
+                {hexWindow(binaryBytes, binaryOffset, i18n.t("Binary source unavailable"))}
               </pre>
             </section>
             <section className="inspector-section">
               <div className="section-title">
-                <span>Companion template</span>
+                <span>{i18n.t("Companion template")}</span>
               </div>
               <div className="source-note">
                 <Braces size={14} />
@@ -368,7 +382,7 @@ export function TimeLogInspector({
         {inspectorTab === "validation" && (
           <section className="inspector-section">
             <div className="section-title">
-              <span>Time-log validation</span>
+              <span>{i18n.t("Time-log validation")}</span>
               <b>{timeLog.validationIssues.length}</b>
             </div>
             <div className="issue-list">
@@ -389,7 +403,7 @@ export function TimeLogInspector({
               ) : (
                 <div className="source-note">
                   <CheckCircle2 size={14} />
-                  <span>The time log decoded without validation issues.</span>
+                  <span>{i18n.t("The time log decoded without validation issues.")}</span>
                 </div>
               )}
             </div>

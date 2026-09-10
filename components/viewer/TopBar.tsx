@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  createI18n,
+  SUPPORTED_LOCALES,
+  type SupportedLocale,
+} from "@/lib/client/i18n";
 import type { IsoXmlDataset } from "@/lib/isoxml/types";
 import {
     Check,
@@ -36,6 +41,8 @@ interface TopBarProps {
   onTheme: () => void;
   onValidation: () => void;
   theme: "dark" | "light";
+  locale: SupportedLocale;
+  onLocaleChange: (locale: SupportedLocale) => void;
 }
 
 export function TopBar({
@@ -50,7 +57,10 @@ export function TopBar({
   onTheme,
   onValidation,
   theme,
+  locale,
+  onLocaleChange,
 }: TopBarProps) {
+  const i18n = createI18n(locale);
   const [datasetMenuOpen, setDatasetMenuOpen] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const datasetMenuRef = useRef<HTMLDivElement>(null);
@@ -62,12 +72,12 @@ export function TopBar({
   const infoCount =
     dataset?.issues.filter((issue) => issue.severity === "info").length ?? 0;
   const issueLabel = errorCount
-    ? `${errorCount} ${errorCount === 1 ? "error" : "errors"}`
+    ? i18n.t("counts.errors", { count: errorCount })
     : warningCount
-      ? `${warningCount} ${warningCount === 1 ? "warning" : "warnings"}`
+      ? i18n.t("counts.warnings", { count: warningCount })
       : infoCount
-        ? `${infoCount} ${infoCount === 1 ? "note" : "notes"}`
-        : "No issues";
+        ? i18n.t("counts.notes", { count: infoCount })
+        : i18n.t("No issues");
   const menuDatasets =
     dataset && !recentDatasets.some((candidate) => candidate.id === dataset.id)
       ? [dataset, ...recentDatasets]
@@ -75,6 +85,13 @@ export function TopBar({
   const storedDatasetIds = new Set(
     recentDatasets.map((candidate) => candidate.id),
   );
+  const validationTitle = `${i18n.t("Open validation report")} · ${i18n.t(
+    "counts.errors",
+    { count: errorCount },
+  )}, ${i18n.t("counts.warnings", { count: warningCount })}, ${i18n.t(
+    "counts.notes",
+    { count: infoCount },
+  )}`;
 
   useEffect(() => {
     if (!datasetMenuOpen && !exportMenuOpen) return;
@@ -122,8 +139,8 @@ export function TopBar({
           onClick={() => setDatasetMenuOpen((open) => !open)}
         >
           <span>
-            <small>{dataset?.sourceLabel ?? "Local workspace"}</small>
-            <strong>{dataset?.title ?? "Preparing dataset…"}</strong>
+            <small>{dataset?.sourceLabel ?? i18n.t("Local workspace")}</small>
+            <strong>{dataset?.title ?? i18n.t("Preparing dataset…")}</strong>
           </span>
           <ChevronDown
             size={14}
@@ -135,21 +152,21 @@ export function TopBar({
           <div
             className="dataset-menu"
             role="menu"
-            aria-label="Recent ISOXML datasets"
+            aria-label={i18n.t("Recent ISOXML datasets")}
           >
             <div className="dataset-menu-heading">
-              <span>RECENT DATASETS</span>
+              <span>{i18n.t("Recent datasets").toUpperCase()}</span>
               <div>
-                <small>Up to 10 · stored locally</small>
+                <small>{i18n.t("Up to 10 · stored locally")}</small>
                 <button
                   type="button"
                   disabled={!recentDatasets.length}
                   onClick={onClearDatasets}
-                  aria-label="Clear all locally stored datasets"
-                  title="Remove all locally stored datasets"
+                  aria-label={i18n.t("Clear all locally stored datasets")}
+                  title={i18n.t("Remove all locally stored datasets")}
                 >
                   <Trash2 size={12} aria-hidden="true" />
-                  Clear all
+                  {i18n.t("Clear all")}
                 </button>
               </div>
             </div>
@@ -176,14 +193,17 @@ export function TopBar({
                       <small>{candidate.sourceLabel}</small>
                     </span>
                     <small>
-                      {candidate.files.length} files ·{" "}
-                      {(candidate.memoryBytes / (1024 * 1024)).toFixed(1)} MiB
+                      {i18n.t("counts.files", { count: candidate.files.length })} ·{" "}
+                      {i18n.formatNumber(candidate.memoryBytes / (1024 * 1024), {
+                        minimumFractionDigits: 1,
+                        maximumFractionDigits: 1,
+                      })} MiB
                     </small>
                     {isActive && (
                       <Check
                         className="dataset-current-indicator"
                         size={15}
-                        aria-label="Current dataset"
+                        aria-label={i18n.t("Current dataset")}
                       />
                     )}
                   </button>
@@ -192,8 +212,10 @@ export function TopBar({
                       type="button"
                       className="dataset-delete"
                       onClick={() => onRemoveDataset(candidate.id)}
-                      aria-label={`Remove ${candidate.title} from local storage`}
-                      title="Remove from local storage"
+                      aria-label={i18n.t("Remove {title} from local storage", {
+                        title: candidate.title,
+                      })}
+                      title={i18n.t("Remove from local storage")}
                     >
                       <Trash2 size={14} aria-hidden="true" />
                     </button>
@@ -202,18 +224,34 @@ export function TopBar({
               );
             })}
             {!recentDatasets.length && (
-              <p>Imported packages will appear here for quick switching.</p>
+              <p>{i18n.t("Imported packages will appear here for quick switching.")}</p>
             )}
           </div>
         )}
       </div>
 
       <div className="topbar-actions">
+        <label className="topbar-locale-select">
+          <span>{i18n.t("Language")}</span>
+          <select
+            value={locale}
+            aria-label={i18n.t("Choose interface language")}
+            onChange={(event) =>
+              onLocaleChange(event.currentTarget.value as SupportedLocale)
+            }
+          >
+            {SUPPORTED_LOCALES.map((option) => (
+              <option key={option.code} value={option.code}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           type="button"
           className={`validation-pill ${errorCount ? "has-error" : warningCount ? "has-warning" : ""}`}
-          title={`Open validation report · ${errorCount} errors, ${warningCount} warnings, ${infoCount} notes`}
-          aria-label={`Open validation report: ${issueLabel}`}
+          title={validationTitle}
+          aria-label={`${i18n.t("Open validation report")}: ${issueLabel}`}
           onClick={onValidation}
         >
           {errorCount || warningCount ? (
@@ -227,7 +265,7 @@ export function TopBar({
           className="icon-button"
           type="button"
           onClick={onTheme}
-          aria-label="Toggle theme"
+          aria-label={i18n.t("Toggle theme")}
         >
           {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
         </button>
@@ -236,21 +274,23 @@ export function TopBar({
           type="button"
           disabled={!dataset}
           onClick={onTransform}
-          aria-label="Create transformed ISOXML package variant"
-          title="Remove or remap content, merge compatible tasks, download, and preview"
+          aria-label={i18n.t("Create transformed ISOXML package variant")}
+          title={i18n.t(
+            "Remove or remap content, merge compatible tasks, download, and preview",
+          )}
         >
           <Sparkles size={15} aria-hidden="true" />
-          <span>Create variant</span>
+          <span>{i18n.t("Create variant")}</span>
         </button>
         <label className="primary-button topbar-button import-button">
           <Import size={15} aria-hidden="true" />
-          <span>Import</span>
+          <span>{i18n.t("Import")}</span>
           <input
             className="import-file-input"
             type="file"
             multiple
             accept=".xml,.bin,.zip,.shp,.dbf,.shx,.prj,.cpg,application/zip,application/xml"
-            aria-label="Import ISOXML files or a zipped shapefile overlay"
+            aria-label={i18n.t("Import ISOXML files or a zipped shapefile overlay")}
             onClick={(event) => {
               event.currentTarget.value = "";
             }}
@@ -275,20 +315,20 @@ export function TopBar({
             disabled={!exportActions.length}
             aria-label={
               hasExportMenu
-                ? "Export selected data channel"
+                ? i18n.t("Export selected data channel")
                 : (primaryExportAction?.ariaLabel ??
-                  "Export selected data channel")
+                  i18n.t("Export selected data channel"))
             }
             aria-haspopup={hasExportMenu ? "menu" : undefined}
             aria-expanded={hasExportMenu ? exportMenuOpen : undefined}
             title={
               hasExportMenu
-                ? "Export active channel"
-                : (primaryExportAction?.title ?? "Export active channel")
+                ? i18n.t("Export active channel")
+                : (primaryExportAction?.title ?? i18n.t("Export active channel"))
             }
           >
             <Download size={15} aria-hidden="true" />
-            <span>Export</span>
+            <span>{i18n.t("Export")}</span>
             {hasExportMenu && (
               <ChevronDown
                 size={14}
@@ -298,7 +338,11 @@ export function TopBar({
             )}
           </button>
           {hasExportMenu && exportMenuOpen && (
-            <div className="export-menu" role="menu" aria-label="Export options">
+            <div
+              className="export-menu"
+              role="menu"
+              aria-label={i18n.t("Export options")}
+            >
               {exportActions.map((action) => (
                 <button
                   key={action.id}

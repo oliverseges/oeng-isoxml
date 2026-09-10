@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { DEFAULT_LOCALE, type SupportedLocale } from "@/lib/client/i18n";
 import { datasetRepository } from "@/lib/isoxml/repository";
 import type { IsoXmlDataset } from "@/lib/isoxml/types";
 
@@ -36,6 +37,7 @@ interface ViewerState {
   rightWidth: number;
   bottomHeight: number;
   baseLayer: "none" | "streets" | "satellite";
+  locale: SupportedLocale;
   hideEmptyCells: boolean;
   hideOutliers: boolean;
   clipToField: boolean;
@@ -64,6 +66,7 @@ interface ViewerState {
   ) => void;
   setPanelSize: (panel: "left" | "right" | "bottom", size: number) => void;
   setBaseLayer: (baseLayer: "none" | "streets" | "satellite") => void;
+  setLocale: (locale: SupportedLocale) => void;
   setHideEmptyCells: (hideEmptyCells: boolean) => void;
   setHideOutliers: (hideOutliers: boolean) => void;
   setClipToField: (clipToField: boolean) => void;
@@ -90,6 +93,7 @@ export const useViewerStore = create<ViewerState>()(
       rightWidth: 344,
       bottomHeight: 212,
       baseLayer: "none",
+      locale: DEFAULT_LOCALE,
       hideEmptyCells: true,
       hideOutliers: false,
       clipToField: false,
@@ -248,6 +252,7 @@ export const useViewerStore = create<ViewerState>()(
               : { bottomHeight: Math.min(420, Math.max(150, size)) },
         ),
       setBaseLayer: (baseLayer) => set({ baseLayer }),
+      setLocale: (locale) => set({ locale }),
       setHideEmptyCells: (hideEmptyCells) => set({ hideEmptyCells }),
       setHideOutliers: (hideOutliers) => set({ hideOutliers }),
       setClipToField: (clipToField) => set({ clipToField }),
@@ -267,6 +272,7 @@ export const useViewerStore = create<ViewerState>()(
         rightWidth: state.rightWidth,
         bottomHeight: state.bottomHeight,
         baseLayer: state.baseLayer,
+        locale: state.locale,
         hideEmptyCells: state.hideEmptyCells,
         hideOutliers: state.hideOutliers,
         clipToField: state.clipToField,

@@ -1,6 +1,10 @@
 "use client";
 
 import {
+  createI18n,
+  type SupportedLocale,
+} from "@/lib/client/i18n";
+import {
     downloadBlob,
     downloadText,
     gridChannelCsv,
@@ -90,6 +94,9 @@ export function ViewerApp() {
   );
   const theme = useViewerStore((state) => state.theme);
   const toggleTheme = useViewerStore((state) => state.toggleTheme);
+  const locale = useViewerStore((state) => state.locale);
+  const setLocale = useViewerStore((state) => state.setLocale);
+  const i18n = createI18n(locale);
   const [search, setSearch] = useState("");
   const [progress, setProgress] = useState<ImportProgress>();
   const [importError, setImportError] = useState<string>();
@@ -143,8 +150,8 @@ export function ViewerApp() {
       stage: "timelogs",
       progress: 0.72,
       detail: adapterId
-        ? "Applying selected time-log adapter"
-        : "Re-evaluating time-log adapters",
+        ? i18n.t("Applying selected time-log adapter")
+        : i18n.t("Re-evaluating time-log adapters"),
     });
     try {
       const nextDataset = await applyTimeLogAdapterInWorker(
@@ -170,7 +177,7 @@ export function ViewerApp() {
       setImportError(
         error instanceof Error
           ? error.message
-          : "The time-log adapter could not be applied.",
+          : i18n.t("The time-log adapter could not be applied."),
       );
     } finally {
       setAdapterBusyId(undefined);
@@ -188,7 +195,9 @@ export function ViewerApp() {
       applyDataset(nextDataset, true);
     } catch (error) {
       setProgress(undefined);
-      setImportError(error instanceof Error ? error.message : "Import failed.");
+      setImportError(
+        error instanceof Error ? error.message : i18n.t("Import failed."),
+      );
     }
   };
 
@@ -203,7 +212,7 @@ export function ViewerApp() {
     setProgress({
       stage: "reading",
       progress: 0.04,
-      detail: "Inspecting shapefile inputs",
+      detail: i18n.t("Inspecting shapefile inputs"),
     });
 
     const inputs = await Promise.all(
@@ -227,7 +236,7 @@ export function ViewerApp() {
       setProgress({
         stage: "spatial",
         progress: 0.84,
-        detail: "Attaching shapefile boundary overlay",
+        detail: i18n.t("Attaching shapefile boundary overlay"),
       });
       applyDataset(nextDataset, true);
       return true;
@@ -236,7 +245,7 @@ export function ViewerApp() {
       setImportError(
         error instanceof Error
           ? error.message
-          : "The shapefile overlay could not be imported.",
+          : i18n.t("The shapefile overlay could not be imported."),
       );
       return true;
     }
@@ -245,6 +254,10 @@ export function ViewerApp() {
   useEffect(() => {
     shellRef.current?.setAttribute("data-interactive", "true");
   }, []);
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
 
   useEffect(() => {
     const compactLayout = window.matchMedia("(max-width: 840px)");
@@ -285,10 +298,10 @@ export function ViewerApp() {
     })().catch((error: unknown) => {
       setProgress(undefined);
       setImportError(
-        error instanceof Error ? error.message : "Demo import failed.",
+        error instanceof Error ? error.message : i18n.t("Demo import failed."),
       );
     });
-  }, [applyDataset, dataset, replaceRecentDatasetIds, selectDataset]);
+  }, [applyDataset, dataset, i18n, replaceRecentDatasetIds, selectDataset]);
 
   useEffect(() => {
     if (!pendingZipFiles) return;
@@ -341,7 +354,9 @@ export function ViewerApp() {
     } catch (error) {
       setProgress(undefined);
       setImportError(
-        error instanceof Error ? error.message : "Separate import failed.",
+        error instanceof Error
+          ? error.message
+          : i18n.t("Separate import failed."),
       );
     }
   };
@@ -370,7 +385,7 @@ export function ViewerApp() {
       setImportError(
         error instanceof Error
           ? error.message
-          : "Fallback dataset failed to load.",
+          : i18n.t("Fallback dataset failed to load."),
       );
     }
   };
@@ -391,7 +406,7 @@ export function ViewerApp() {
       setImportError(
         error instanceof Error
           ? error.message
-          : "Fallback dataset failed to load.",
+          : i18n.t("Fallback dataset failed to load."),
       );
     }
   };
@@ -500,7 +515,7 @@ export function ViewerApp() {
       setImportError(
         error instanceof Error
           ? error.message
-          : "The shapefile export could not be created.",
+            : i18n.t("The shapefile export could not be created."),
       );
     }
   };
@@ -543,7 +558,7 @@ export function ViewerApp() {
       setImportError(
         error instanceof Error
           ? error.message
-          : "The shapefile export could not be created.",
+            : i18n.t("The shapefile export could not be created."),
       );
     }
   };
@@ -552,28 +567,32 @@ export function ViewerApp() {
     ? [
         {
           id: "grid-csv",
-          label: "Export as CSV",
-          description: "Cell coordinates, raw values, and scaled values in a flat table.",
-          ariaLabel: "Export selected data channel as CSV",
-          title: "Export active channel as CSV",
+          label: i18n.t("Export as CSV"),
+          description: i18n.t(
+            "Cell coordinates, raw values, and scaled values in a flat table.",
+          ),
+          ariaLabel: i18n.t("Export selected data channel as CSV"),
+          title: i18n.t("Export active channel as CSV"),
           onSelect: exportGridCsv,
         },
         {
           id: "grid-shapefile",
-          label: "Export as Shapefile (.zip)",
-          description:
+          label: i18n.t("Export as Shapefile (.zip)"),
+          description: i18n.t(
             "Grid cells as polygon features in a zipped Shapefile bundle.",
-          ariaLabel: "Export selected data channel as Shapefile",
-          title: "Export active channel as Shapefile (.zip)",
+          ),
+          ariaLabel: i18n.t("Export selected data channel as Shapefile"),
+          title: i18n.t("Export active channel as Shapefile (.zip)"),
           onSelect: exportGridShapefile,
         },
         {
           id: "grid-geojson",
-          label: "Export as GeoJSON",
-          description:
+          label: i18n.t("Export as GeoJSON"),
+          description: i18n.t(
             "Grid cells as polygon features with raw and scaled properties.",
-          ariaLabel: "Export selected data channel as GeoJSON",
-          title: "Export active channel as GeoJSON",
+          ),
+          ariaLabel: i18n.t("Export selected data channel as GeoJSON"),
+          title: i18n.t("Export active channel as GeoJSON"),
           onSelect: exportGridGeoJson,
         },
       ]
@@ -581,29 +600,32 @@ export function ViewerApp() {
       ? [
           {
             id: "timelog-csv",
-            label: "Export as CSV",
-            description:
+            label: i18n.t("Export as CSV"),
+            description: i18n.t(
               "Decoded time-log records with timestamps, positions, and values.",
-            ariaLabel: "Export selected data channel as CSV",
-            title: "Export active channel as CSV",
+            ),
+            ariaLabel: i18n.t("Export selected data channel as CSV"),
+            title: i18n.t("Export active channel as CSV"),
             onSelect: exportTimeLogCsv,
           },
           {
             id: "timelog-shapefile",
-            label: "Export as Shapefile (.zip)",
-            description:
+            label: i18n.t("Export as Shapefile (.zip)"),
+            description: i18n.t(
               "Positioned executed records as point features in a zipped Shapefile bundle.",
-            ariaLabel: "Export selected data channel as Shapefile",
-            title: "Export active channel as Shapefile (.zip)",
+            ),
+            ariaLabel: i18n.t("Export selected data channel as Shapefile"),
+            title: i18n.t("Export active channel as Shapefile (.zip)"),
             onSelect: exportTimeLogShapefile,
           },
           {
             id: "timelog-geojson",
-            label: "Export as GeoJSON",
-            description:
+            label: i18n.t("Export as GeoJSON"),
+            description: i18n.t(
               "Executed records as GeoJSON features with point geometry when positions are valid.",
-            ariaLabel: "Export selected data channel as GeoJSON",
-            title: "Export active channel as GeoJSON",
+            ),
+            ariaLabel: i18n.t("Export selected data channel as GeoJSON"),
+            title: i18n.t("Export active channel as GeoJSON"),
             onSelect: exportTimeLogGeoJson,
           },
         ]
@@ -645,7 +667,7 @@ export function ViewerApp() {
       setImportError(
         error instanceof Error
           ? error.message
-          : "The package variant could not be created.",
+            : i18n.t("The package variant could not be created."),
       );
     }
   };
@@ -672,10 +694,10 @@ export function ViewerApp() {
       onDragLeave={(event) => {
         if (event.currentTarget === event.target) setDragActive(false);
       }}
-      onDrop={(event) => {
+        onDrop={(event) => {
         event.preventDefault();
         setDragActive(false);
-        onFiles(event.dataTransfer.files, "Dropped ISOXML package");
+        onFiles(event.dataTransfer.files, i18n.t("Dropped ISOXML package"));
       }}
     >
       <TopBar
@@ -684,7 +706,7 @@ export function ViewerApp() {
         onSelectDataset={selectDataset}
         onRemoveDataset={(id) => void removeStoredDataset(id)}
         onClearDatasets={() => void clearStoredDatasets()}
-        onImportFiles={(files) => onFiles(files, "Selected ISOXML files")}
+        onImportFiles={(files) => onFiles(files, i18n.t("Selected ISOXML files"))}
         onTransform={() => {
           setTransformDialogMode("cleanup");
           setTransformDialogVariantName(undefined);
@@ -695,6 +717,8 @@ export function ViewerApp() {
         onTheme={toggleTheme}
         onValidation={() => setBottomTab("issues")}
         theme={theme}
+        locale={locale}
+        onLocaleChange={(nextLocale) => setLocale(nextLocale as SupportedLocale)}
       />
       <div className="workspace-body">
         {!leftCollapsed && dataset && (
@@ -754,29 +778,30 @@ export function ViewerApp() {
           ) : dataset ? (
             <div className="workspace-loading workspace-empty">
               <DatabaseZap size={30} />
-              <strong>No decoded spatial channel is available</strong>
+              <strong>{i18n.t("No decoded spatial channel is available")}</strong>
               <span>
-                The package is still preserved. Review its issues, files, and
-                raw XML for unsupported or incomplete data.
+                {i18n.t(
+                  "The package is still preserved. Review its issues, files, and raw XML for unsupported or incomplete data.",
+                )}
               </span>
               <div className="workspace-empty-actions">
                 <button type="button" onClick={() => setBottomTab("issues")}>
-                  Open issues
+                  {i18n.t("Open issues")}
                 </button>
                 <button type="button" onClick={() => setBottomTab("files")}>
-                  Open files
+                  {i18n.t("Open files")}
                 </button>
                 <button type="button" onClick={() => setBottomTab("source")}>
-                  Open XML
+                  {i18n.t("Open XML")}
                 </button>
               </div>
             </div>
           ) : (
             <div className="workspace-loading">
               <DatabaseZap size={30} />
-              <strong>Preparing the engineering workspace</strong>
+              <strong>{i18n.t("Preparing the engineering workspace")}</strong>
               <span>
-                Lossless XML, references and binary layers will appear here.
+                {i18n.t("Lossless XML, references and binary layers will appear here.")}
               </span>
             </div>
           )}
@@ -785,7 +810,7 @@ export function ViewerApp() {
             onPointerDown={(event) => startResize("bottom", event)}
             onKeyDown={(event) => resizeWithKeyboard("bottom", event)}
             role="separator"
-            aria-label="Resize technical data panel"
+            aria-label={i18n.t("Resize technical data panel")}
             aria-orientation="horizontal"
             aria-valuemin={150}
             aria-valuemax={420}
@@ -806,10 +831,10 @@ export function ViewerApp() {
               className="collapsed-bottom-toggle"
               type="button"
               onClick={() => setPanelCollapsed("bottom", false)}
-              aria-label="Open data panel"
+              aria-label={i18n.t("Open data panel")}
             >
               <ChevronLeft size={13} />
-              OPEN DATA PANEL
+              {i18n.t("Open data panel").toUpperCase()}
             </button>
           )}
         </div>
@@ -818,7 +843,7 @@ export function ViewerApp() {
           onPointerDown={(event) => startResize("right", event)}
           onKeyDown={(event) => resizeWithKeyboard("right", event)}
           role="separator"
-          aria-label="Resize object inspector"
+          aria-label={i18n.t("Resize object inspector")}
           aria-orientation="vertical"
           aria-valuemin={280}
           aria-valuemax={520}
@@ -853,7 +878,7 @@ export function ViewerApp() {
           type="button"
           className="collapsed-panel-toggle left"
           onClick={() => openPanel("left")}
-          aria-label="Open dataset navigator"
+          aria-label={i18n.t("Open dataset navigator")}
         >
           <ChevronRight size={15} />
         </button>
@@ -863,7 +888,7 @@ export function ViewerApp() {
           type="button"
           className="panel-collapse-control left"
           onClick={() => setPanelCollapsed("left", true)}
-          aria-label="Collapse dataset navigator"
+          aria-label={i18n.t("Collapse dataset navigator")}
         >
           <ChevronLeft size={13} />
         </button>
@@ -873,7 +898,7 @@ export function ViewerApp() {
           type="button"
           className="collapsed-panel-toggle right"
           onClick={() => openPanel("right")}
-          aria-label="Open object inspector"
+          aria-label={i18n.t("Open object inspector")}
         >
           <ChevronLeft size={15} />
         </button>
@@ -883,7 +908,7 @@ export function ViewerApp() {
           type="button"
           className="panel-collapse-control right"
           onClick={() => setPanelCollapsed("right", true)}
-          aria-label="Collapse object inspector"
+          aria-label={i18n.t("Collapse object inspector")}
         >
           <ChevronRight size={13} />
         </button>
@@ -908,20 +933,27 @@ export function ViewerApp() {
             aria-modal="true"
             aria-labelledby="multi-import-title"
           >
-            <small>MULTIPLE ZIP PACKAGES</small>
+            <small>{i18n.t("Multiple ZIP packages").toUpperCase()}</small>
             <h2 id="multi-import-title">
-              How should {pendingZipFiles.length} packages be imported?
+              {i18n.t("How should {count} packages be imported?", {
+                count: pendingZipFiles.length,
+              })}
             </h2>
             <p>
-              Separate imports remain available in Recent datasets. Combining
-              preserves every selected file in one workspace; it does not
-              rewrite their ISOXML relationships.
+              {i18n.t(
+                "Separate imports remain available in Recent datasets. Combining preserves every selected file in one workspace; it does not rewrite their ISOXML relationships.",
+              )}
             </p>
             <ul>
               {pendingZipFiles.map((file) => (
                 <li key={`${file.name}-${file.size}-${file.lastModified}`}>
                   <span>{file.name}</span>
-                  <small>{(file.size / (1024 * 1024)).toFixed(1)} MiB</small>
+                  <small>
+                    {i18n.formatNumber(file.size / (1024 * 1024), {
+                      minimumFractionDigits: 1,
+                      maximumFractionDigits: 1,
+                    })} MiB
+                  </small>
                 </li>
               ))}
             </ul>
@@ -931,7 +963,7 @@ export function ViewerApp() {
                 className="secondary-button"
                 onClick={() => setPendingZipFiles(undefined)}
               >
-                Cancel
+                {i18n.t("Cancel")}
               </button>
               <button
                 type="button"
@@ -941,11 +973,13 @@ export function ViewerApp() {
                   setPendingZipFiles(undefined);
                   void runImport(
                     files,
-                    `Merged ${files.length} ISOXML packages`,
+                    i18n.t("Merged {count} ISOXML packages", {
+                      count: files.length,
+                    }),
                   );
                 }}
               >
-                Combine in one workspace
+                {i18n.t("Combine in one workspace")}
               </button>
               <button
                 type="button"
@@ -953,7 +987,7 @@ export function ViewerApp() {
                 autoFocus
                 onClick={() => void importZipFilesSeparately(pendingZipFiles)}
               >
-                Import separately
+                {i18n.t("Import separately")}
               </button>
             </div>
           </section>
@@ -969,10 +1003,12 @@ export function ViewerApp() {
               <LoaderCircle size={30} className="spin" />
             )}
             <small>
-              {dragActive ? "LOCAL IMPORT" : progress?.stage.toUpperCase()}
+              {dragActive
+                ? i18n.t("Local import").toUpperCase()
+                : i18n.t(`import.stage.${progress?.stage}`)}
             </small>
             <strong>
-              {dragActive ? "Drop the ISOXML package here" : progress?.detail}
+              {dragActive ? i18n.t("Drop the ISOXML package here") : progress?.detail}
             </strong>
             {!dragActive && (
               <>
@@ -981,7 +1017,7 @@ export function ViewerApp() {
                     style={{ width: `${(progress?.progress ?? 0) * 100}%` }}
                   />
                 </div>
-                <p>Files are processed locally and are never uploaded.</p>
+                <p>{i18n.t("Files are processed locally and are never uploaded.")}</p>
               </>
             )}
           </div>
@@ -991,11 +1027,11 @@ export function ViewerApp() {
       {importError && (
         <div className="error-toast" role="alert">
           <div>
-            <small>IMPORT STOPPED</small>
+              <small>{i18n.t("Import stopped").toUpperCase()}</small>
             <strong>{importError}</strong>
           </div>
           <button type="button" onClick={() => setImportError(undefined)}>
-            DISMISS
+              {i18n.t("Dismiss").toUpperCase()}
           </button>
         </div>
       )}

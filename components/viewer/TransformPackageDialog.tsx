@@ -23,6 +23,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
+import { createI18n } from "@/lib/client/i18n";
 import {
   analyzePackageTransform,
   mergeTaskCompatibilityIssues,
@@ -32,6 +33,7 @@ import {
   type PackageTransformPlan,
 } from "@/lib/isoxml/package-transform";
 import type { IsoXmlDataset } from "@/lib/isoxml/types";
+import { useViewerStore } from "./store";
 
 interface TransformPackageDialogProps {
   dataset: IsoXmlDataset;
@@ -63,12 +65,15 @@ export function TransformPackageDialog({
   onCancel,
   onCreate,
 }: TransformPackageDialogProps) {
+  const locale = useViewerStore((state) => state.locale);
+  const i18n = createI18n(locale);
   const dvcObjects = dataset.objects.filter(
     (object) => object.elementType === "DVC" && object.id,
   );
   const [mode, setMode] = useState<"cleanup" | "merge">(initialMode);
   const [variantName, setVariantName] = useState(
-    initialVariantName ?? `${dataset.title} transformed`,
+    initialVariantName ??
+      i18n.t("{title} transformed", { title: dataset.title }),
   );
   const [keptTaskIds, setKeptTaskIds] = useState(
     () => new Set(dataset.tasks.map((task) => task.id)),
@@ -104,7 +109,9 @@ export function TransformPackageDialog({
     {
       draftId: "merge-1",
       taskIds: new Set<string>(),
-      mergedTaskName: `Combined ${dataset.tasks[0]?.fieldName ?? "task"}`,
+      mergedTaskName: i18n.t("Combined {name}", {
+        name: dataset.tasks[0]?.fieldName ?? i18n.t("task"),
+      }),
     },
   ]);
   const [activeMergeGroupId, setActiveMergeGroupId] = useState("merge-1");
@@ -401,7 +408,9 @@ export function TransformPackageDialog({
       {
         draftId,
         taskIds: new Set<string>(),
-        mergedTaskName: `Combined ${dataset.tasks[0]?.fieldName ?? "task"} ${mergeGroupCounter.current}`,
+        mergedTaskName: `${i18n.t("Combined {name}", {
+          name: dataset.tasks[0]?.fieldName ?? i18n.t("task"),
+        })} ${mergeGroupCounter.current}`,
       },
     ]);
     setActiveMergeGroupId(draftId);
@@ -439,18 +448,19 @@ export function TransformPackageDialog({
             <Sparkles size={19} aria-hidden="true" />
           </div>
           <div>
-            <small>NON-DESTRUCTIVE AUTHORING</small>
-            <h2 id="transform-dialog-title">Create package variant</h2>
+            <small>{i18n.t("Non-destructive authoring").toUpperCase()}</small>
+            <h2 id="transform-dialog-title">{i18n.t("Create package variant")}</h2>
             <p>
-              Generate a new ZIP, validate it through the normal importer, and
-              select it as a separate local dataset.
+              {i18n.t(
+                "Generate a new ZIP, validate it through the normal importer, and select it as a separate local dataset.",
+              )}
             </p>
           </div>
           <button
             type="button"
             onClick={onCancel}
             disabled={creating}
-            aria-label="Close package variant dialog"
+            aria-label={i18n.t("Close package variant dialog")}
           >
             <X size={16} />
           </button>
@@ -458,13 +468,13 @@ export function TransformPackageDialog({
 
         <div className="transform-name-row">
           <label>
-            <span>Variant name</span>
+            <span>{i18n.t("Variant name")}</span>
             <input
               autoFocus
               value={variantName}
               maxLength={120}
               onChange={(event) => setVariantName(event.currentTarget.value)}
-              placeholder="North field · controller-ready"
+              placeholder={i18n.t("North field · controller-ready")}
             />
           </label>
           <span>.zip</span>
@@ -479,7 +489,7 @@ export function TransformPackageDialog({
             onClick={() => setMode("cleanup")}
           >
             <Wrench size={14} />
-            Cleanup & remap
+            {i18n.t("Cleanup & remap")}
           </button>
           <button
             type="button"
@@ -489,7 +499,7 @@ export function TransformPackageDialog({
             onClick={() => setMode("merge")}
           >
             <GitMerge size={14} />
-            Merge compatible tasks
+            {i18n.t("Merge compatible tasks")}
           </button>
         </div>
 
@@ -500,9 +510,9 @@ export function TransformPackageDialog({
                 <div className="transform-section-heading">
                   <div>
                     <Trash2 size={14} />
-                    <span>Keep or remove package content</span>
+                    <span>{i18n.t("Keep or remove package content")}</span>
                   </div>
-                  <small>Unchecked content is removed from the variant</small>
+                  <small>{i18n.t("Unchecked content is removed from the variant")}</small>
                 </div>
                 {!!dataset.timeLogs.length && (
                   <section
@@ -510,12 +520,11 @@ export function TransformPackageDialog({
                   >
                     <AlertTriangle size={20} aria-hidden="true" />
                     <div>
-                      <strong>Executed-data editing is unlocked</strong>
+                      <strong>{i18n.t("Executed-data editing is unlocked")}</strong>
                       <p>
-                        You may remove a complete time log or remap its DLV
-                        device-element references. Record bytes are preserved;
-                        individual executed channels cannot be removed because
-                        that would change sparse binary indexes.
+                        {i18n.t(
+                          "You may remove a complete time log or remap its DLV device-element references. Record bytes are preserved; individual executed channels cannot be removed because that would change sparse binary indexes.",
+                        )}
                       </p>
                       {executedDataChanged && (
                         <label>
@@ -529,9 +538,9 @@ export function TransformPackageDialog({
                             }
                           />
                           <span>
-                            I understand that the generated variant changes
-                            executed-data evidence and must be verified before
-                            downstream use.
+                            {i18n.t(
+                              "I understand that the generated variant changes executed-data evidence and must be verified before downstream use.",
+                            )}
                           </span>
                         </label>
                       )}
@@ -564,7 +573,7 @@ export function TransformPackageDialog({
                           <span>
                             <strong>{task.name}</strong>
                             <small>
-                              {task.id} · {task.fieldName ?? "No field"}
+                              {task.id} · {task.fieldName ?? i18n.t("No field")}
                             </small>
                           </span>
                           <b>
@@ -595,7 +604,7 @@ export function TransformPackageDialog({
                                 <span>
                                   <strong>{grid.id}</strong>
                                   <small>
-                                    {grid.rows}×{grid.columns} · Type{" "}
+                                    {grid.rows}×{grid.columns} · {i18n.t("Type")}{" "}
                                     {grid.gridType} · {grid.filename}
                                   </small>
                                 </span>
@@ -630,7 +639,7 @@ export function TransformPackageDialog({
                                         <small>
                                           DDI {channel.ddiDisplay} · PDV{" "}
                                           {channel.pdvIndex + 1} ·{" "}
-                                          {channel.unit ?? "unit unknown"}
+                                          {channel.unit ?? i18n.t("unit unknown")}
                                         </small>
                                       </span>
                                     </label>
@@ -652,7 +661,7 @@ export function TransformPackageDialog({
                                         }}
                                       >
                                         <option value="">
-                                          No DET reference
+                                          {i18n.t("No DET reference")}
                                         </option>
                                         {detObjects.map((det, detIndex) => (
                                           <option
@@ -663,7 +672,7 @@ export function TransformPackageDialog({
                                             {det.attributes.D ??
                                               det.attributes
                                                 .DeviceElementDesignator ??
-                                              "Unnamed device element"}
+                                              i18n.t("Unnamed device element")}
                                           </option>
                                         ))}
                                         {newDeviceElements.map((det) => (
@@ -673,8 +682,8 @@ export function TransformPackageDialog({
                                           >
                                             {det.id} ·{" "}
                                             {det.designator.trim() ||
-                                              "New device element"}{" "}
-                                            (new)
+                                              i18n.t("New device element")}{" "}
+                                            ({i18n.t("new")})
                                           </option>
                                         ))}
                                       </select>
@@ -710,8 +719,10 @@ export function TransformPackageDialog({
                                 <span>
                                   <strong>{timeLog.id}</strong>
                                   <small>
-                                    {timeLog.decodedRecordCount.toLocaleString()}{" "}
-                                    records · {timeLog.headerFilename} ·{" "}
+                                    {i18n.t("counts.records", {
+                                      count: timeLog.decodedRecordCount,
+                                    })}{" "}
+                                    · {timeLog.headerFilename} ·{" "}
                                     {timeLog.filename}
                                   </small>
                                 </span>
@@ -731,12 +742,12 @@ export function TransformPackageDialog({
                                         </strong>
                                         <small>
                                           DLV {channel.dlvIndex + 1} ·{" "}
-                                          {channel.unit ?? "unit unknown"}
+                                          {channel.unit ?? i18n.t("unit unknown")}
                                         </small>
                                       </span>
                                     </div>
                                     <label className="transform-det-select">
-                                      <span>DLV device element</span>
+                                      <span>{i18n.t("DLV device element")}</span>
                                       <select
                                         value={
                                           detAssignments[channel.channelId] ??
@@ -753,7 +764,7 @@ export function TransformPackageDialog({
                                         }}
                                       >
                                         <option value="">
-                                          No DET reference
+                                          {i18n.t("No DET reference")}
                                         </option>
                                         {detObjects.map((det, detIndex) => (
                                           <option
@@ -764,7 +775,7 @@ export function TransformPackageDialog({
                                             {det.attributes.D ??
                                               det.attributes
                                                 .DeviceElementDesignator ??
-                                              "Unnamed device element"}
+                                              i18n.t("Unnamed device element")}
                                           </option>
                                         ))}
                                         {newDeviceElements.map((det) => (
@@ -774,8 +785,8 @@ export function TransformPackageDialog({
                                           >
                                             {det.id} ·{" "}
                                             {det.designator.trim() ||
-                                              "New device element"}{" "}
-                                            (new)
+                                              i18n.t("New device element")}{" "}
+                                            ({i18n.t("new")})
                                           </option>
                                         ))}
                                       </select>
@@ -793,20 +804,21 @@ export function TransformPackageDialog({
                   <div className="transform-section-heading">
                     <div>
                       <ShieldCheck size={14} />
-                      <span>Add DET to an existing device</span>
+                      <span>{i18n.t("Add DET to an existing device")}</span>
                     </div>
                     <button
                       type="button"
                       onClick={addDeviceElement}
                       disabled={!dvcObjects.length}
                     >
-                      + Add DET
+                      + {i18n.t("Add DET")}
                     </button>
                   </div>
                   {!dvcObjects.length ? (
                     <p className="transform-authoring-note">
-                      No DVC is available. Creating a new device graph is
-                      outside this quick editor.
+                      {i18n.t(
+                        "No DVC is available. Creating a new device graph is outside this quick editor.",
+                      )}
                     </p>
                   ) : (
                     <>
@@ -835,7 +847,7 @@ export function TransformPackageDialog({
                             }
                           >
                             <label>
-                              <span>DET ID</span>
+                              <span>{i18n.t("DET ID")}</span>
                               <input
                                 value={det.id}
                                 maxLength={14}
@@ -847,7 +859,7 @@ export function TransformPackageDialog({
                               />
                             </label>
                             <label>
-                              <span>Device</span>
+                              <span>{i18n.t("Device")}</span>
                               <select
                                 value={det.deviceId}
                                 onChange={(event) => {
@@ -865,17 +877,17 @@ export function TransformPackageDialog({
                                     value={dvc.id}
                                   >
                                     {dvc.id} ·{" "}
-                                    {dvc.attributes.B ?? "Unnamed device"}
+                                    {dvc.attributes.B ?? i18n.t("Unnamed device")}
                                   </option>
                                 ))}
                               </select>
                             </label>
                             <label className="designator">
-                              <span>Designator</span>
+                              <span>{i18n.t("Designator")}</span>
                               <input
                                 value={det.designator}
                                 maxLength={32}
-                                placeholder="e.g. Rear tank"
+                                placeholder={i18n.t("e.g. Rear tank")}
                                 onChange={(event) =>
                                   updateDeviceElement(det.draftId, {
                                     designator: event.currentTarget.value,
@@ -884,7 +896,7 @@ export function TransformPackageDialog({
                               />
                             </label>
                             <label>
-                              <span>Type</span>
+                              <span>{i18n.t("Type")}</span>
                               <select
                                 value={det.elementType}
                                 onChange={(event) =>
@@ -895,17 +907,17 @@ export function TransformPackageDialog({
                                   })
                                 }
                               >
-                                <option value={1}>1 · Device</option>
-                                <option value={2}>2 · Function</option>
-                                <option value={3}>3 · Bin</option>
-                                <option value={4}>4 · Section</option>
-                                <option value={5}>5 · Unit</option>
-                                <option value={6}>6 · Connector</option>
-                                <option value={7}>7 · Navigation</option>
+                                <option value={1}>1 · {i18n.t("Device")}</option>
+                                <option value={2}>2 · {i18n.t("Function")}</option>
+                                <option value={3}>3 · {i18n.t("Bin")}</option>
+                                <option value={4}>4 · {i18n.t("Section")}</option>
+                                <option value={5}>5 · {i18n.t("Unit")}</option>
+                                <option value={6}>6 · {i18n.t("Connector")}</option>
+                                <option value={7}>7 · {i18n.t("Navigation")}</option>
                               </select>
                             </label>
                             <label>
-                              <span>Object ID</span>
+                              <span>{i18n.t("Object ID")}</span>
                               <input
                                 type="number"
                                 min={1}
@@ -919,7 +931,7 @@ export function TransformPackageDialog({
                               />
                             </label>
                             <label>
-                              <span>Element no.</span>
+                              <span>{i18n.t("Element no.")}</span>
                               <input
                                 type="number"
                                 min={0}
@@ -935,7 +947,7 @@ export function TransformPackageDialog({
                               />
                             </label>
                             <label className="parent">
-                              <span>Parent</span>
+                              <span>{i18n.t("Parent")}</span>
                               <select
                                 value={det.parentObjectId}
                                 onChange={(event) =>
@@ -946,7 +958,7 @@ export function TransformPackageDialog({
                                   })
                                 }
                               >
-                                <option value={0}>0 · Device root</option>
+                                <option value={0}>0 · {i18n.t("Device root")}</option>
                                 {existingParents.map((parent) => (
                                   <option
                                     key={parent.uid}
@@ -962,7 +974,7 @@ export function TransformPackageDialog({
                                     value={parent.objectId}
                                   >
                                     {parent.objectId} ·{" "}
-                                    {parent.designator || parent.id} (new)
+                                    {parent.designator || parent.id} ({i18n.t("new")})
                                   </option>
                                 ))}
                               </select>
@@ -971,7 +983,9 @@ export function TransformPackageDialog({
                               type="button"
                               className="remove"
                               onClick={() => removeDeviceElement(det.draftId)}
-                              aria-label={`Remove new device element ${det.id}`}
+                              aria-label={i18n.t("Remove new device element {id}", {
+                                id: det.id,
+                              })}
                             >
                               <Trash2 size={14} />
                             </button>
@@ -979,9 +993,9 @@ export function TransformPackageDialog({
                         );
                       })}
                       <p className="transform-authoring-note">
-                        Required object/type/number/parent fields are
-                        preflighted. New DVC, DOR, DPD and DPT authoring remains
-                        outside this quick editor.
+                        {i18n.t(
+                          "Required object/type/number/parent fields are preflighted. New DVC, DOR, DPD and DPT authoring remains outside this quick editor.",
+                        )}
                       </p>
                     </>
                   )}
@@ -992,14 +1006,14 @@ export function TransformPackageDialog({
                 <div className="transform-section-heading">
                   <div>
                     <GitMerge size={14} />
-                    <span>Build independent compatible merge groups</span>
+                    <span>{i18n.t("Build independent compatible merge groups")}</span>
                   </div>
-                  <small>Unassigned tasks remain unchanged</small>
+                  <small>{i18n.t("Unassigned tasks remain unchanged")}</small>
                 </div>
                 <div
                   className="transform-merge-groups"
                   role="tablist"
-                  aria-label="Task merge groups"
+                  aria-label={i18n.t("Task merge groups")}
                 >
                   {mergeGroups.map((group, index) => (
                     <button
@@ -1014,20 +1028,19 @@ export function TransformPackageDialog({
                       onClick={() => setActiveMergeGroupId(group.draftId)}
                       key={group.draftId}
                     >
-                      <span>Merge {index + 1}</span>
+                      <span>{i18n.t("Merge {index}", { index: index + 1 })}</span>
                       <b>
-                        {group.taskIds.size}{" "}
-                        {group.taskIds.size === 1 ? "task" : "tasks"}
+                        {i18n.t("counts.tasks", { count: group.taskIds.size })}
                       </b>
                     </button>
                   ))}
                   <button type="button" className="add" onClick={addMergeGroup}>
-                    <Plus size={13} aria-hidden="true" /> New merge
+                    <Plus size={13} aria-hidden="true" /> {i18n.t("New merge")}
                   </button>
                 </div>
                 <div className="transform-merge-group-editor">
                   <label className="transform-merged-name">
-                    <span>Merged task name</span>
+                    <span>{i18n.t("Merged task name")}</span>
                     <input
                       value={activeMergeGroup.mergedTaskName}
                       maxLength={32}
@@ -1046,7 +1059,7 @@ export function TransformPackageDialog({
                       className="remove-merge-group"
                       onClick={removeActiveMergeGroup}
                     >
-                      <Trash2 size={13} aria-hidden="true" /> Remove group
+                      <Trash2 size={13} aria-hidden="true" /> {i18n.t("Remove group")}
                     </button>
                   )}
                 </div>
@@ -1083,7 +1096,7 @@ export function TransformPackageDialog({
                         <span>
                           <strong>{task.name}</strong>
                           <small>
-                            {task.id} · {task.fieldName ?? "No field"} ·{" "}
+                            {task.id} · {task.fieldName ?? i18n.t("No field")} ·{" "}
                             {grids.length === 1
                               ? `${grids[0].rows}×${grids[0].columns}, ${grids[0].channels.length} PDV`
                               : `${grids.length} grids`}
@@ -1094,7 +1107,7 @@ export function TransformPackageDialog({
                         </span>
                         {assignedIndex >= 0 && (
                           <b className="transform-merge-assignment">
-                            Merge {assignedIndex + 1}
+                            {i18n.t("Merge {index}", { index: assignedIndex + 1 })}
                           </b>
                         )}
                       </label>
@@ -1104,11 +1117,9 @@ export function TransformPackageDialog({
                 <div className="transform-merge-explanation">
                   <PackageCheck size={17} />
                   <p>
-                    Merge is allowed only when field/customer/farm, task status,
-                    origin, dimensions, cell size, orientation, and decoded cell
-                    count match. Different fields are blocked because one TSK
-                    can reference only one PFD. After the first task is checked,
-                    incompatible choices are disabled with the blocking reason.
+                    {i18n.t(
+                      "Merge is allowed only when field/customer/farm, task status, origin, dimensions, cell size, orientation, and decoded cell count match. Different fields are blocked because one TSK can reference only one PFD. After the first task is checked, incompatible choices are disabled with the blocking reason.",
+                    )}
                   </p>
                 </div>
               </>
@@ -1117,19 +1128,22 @@ export function TransformPackageDialog({
 
           <aside
             className="transform-preflight"
-            aria-label="Transform preflight"
+            aria-label={i18n.t("Transform preflight")}
           >
             <div className="transform-section-heading">
               <div>
                 <PackageCheck size={14} />
-                <span>Preflight</span>
+                <span>{i18n.t("Preflight")}</span>
               </div>
             </div>
             {analysis.blockers.length ? (
               <section className="transform-findings blockers">
                 <strong>
-                  <AlertTriangle size={14} /> {analysis.blockers.length} blocker
-                  {analysis.blockers.length === 1 ? "" : "s"}
+                  <AlertTriangle size={14} /> {analysis.blockers.length === 1
+                    ? i18n.t("1 blocker")
+                    : i18n.t("{count} blockers", {
+                        count: analysis.blockers.length,
+                      })}
                 </strong>
                 <ul>
                   {analysis.blockers.map((blocker) => (
@@ -1141,14 +1155,14 @@ export function TransformPackageDialog({
               <div className="transform-ready">
                 <CheckCircle2 size={17} />
                 <span>
-                  <strong>Ready to generate</strong>
-                  <small>The result will be re-imported and validated.</small>
+                  <strong>{i18n.t("Ready to generate")}</strong>
+                  <small>{i18n.t("The result will be re-imported and validated.")}</small>
                 </span>
               </div>
             )}
             {!!analysis.changes.length && (
               <section className="transform-findings changes">
-                <strong>Planned changes</strong>
+                <strong>{i18n.t("Planned changes")}</strong>
                 <ul>
                   {analysis.changes.map((change) => (
                     <li key={change}>{change}</li>
@@ -1158,7 +1172,7 @@ export function TransformPackageDialog({
             )}
             {!!analysis.warnings.length && (
               <section className="transform-findings warnings">
-                <strong>Notes</strong>
+                <strong>{i18n.t("Notes")}</strong>
                 <ul>
                   {analysis.warnings.map((warning) => (
                     <li key={warning}>{warning}</li>
@@ -1171,8 +1185,9 @@ export function TransformPackageDialog({
 
         <footer className="transform-actions">
           <p>
-            Your source dataset is never modified. Processing and validation
-            stay in this browser.
+            {i18n.t(
+              "Your source dataset is never modified. Processing and validation stay in this browser.",
+            )}
           </p>
           <button
             type="button"
@@ -1191,8 +1206,8 @@ export function TransformPackageDialog({
             >
               <ArrowRight size={14} />
               {creatingAction === "continue-to-merge"
-                ? "Applying cleanup…"
-                : "Apply & continue to merge"}
+                ? i18n.t("Applying cleanup…")
+                : i18n.t("Apply & continue to merge")}
             </button>
           )}
           <button
@@ -1203,8 +1218,8 @@ export function TransformPackageDialog({
           >
             <Sparkles size={14} />
             {creatingAction === "download"
-              ? "Creating variant…"
-              : "Create, download & preview"}
+              ? i18n.t("Creating variant…")
+              : i18n.t("Create, download & preview")}
           </button>
         </footer>
       </section>

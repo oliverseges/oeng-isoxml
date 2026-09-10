@@ -33,6 +33,7 @@ import type {
   SpatialBoundary,
   TimeLogChannel,
 } from "@/lib/isoxml/types";
+import { createI18n, type I18n } from "@/lib/client/i18n";
 import { useViewerStore } from "./store";
 import {
   BASEMAP_ZOOM_OPTIONS,
@@ -148,6 +149,7 @@ function fittedCanvasText(
 function drawExportLegend(
   context: CanvasRenderingContext2D,
   width: number,
+  i18n: I18n,
   channel: TimeLogChannel,
   min: number,
   max: number,
@@ -174,14 +176,14 @@ function drawExportLegend(
   context.fillStyle = "#8f9d96";
   context.font = '8px Consolas, "SFMono-Regular", monospace';
   context.textBaseline = "top";
-  context.fillText("EXECUTED · ACTIVE", innerX + 14, y + 13);
+  context.fillText(i18n.t("Executed · active").toUpperCase(), innerX + 14, y + 13);
 
   context.fillStyle = "#dce5df";
   context.font = "600 14px Inter, Arial, sans-serif";
   context.fillText(
     fittedCanvasText(
       context,
-      channel.deviceElementName ?? "Device element unresolved",
+      channel.deviceElementName ?? i18n.t("Device element unresolved"),
       innerWidth,
     ),
     innerX,
@@ -230,7 +232,11 @@ function drawExportLegend(
   context.fillStyle = "#c9d5ce";
   context.textAlign = "center";
   context.fillText(
-    fittedCanvasText(context, channel.unit ?? "unit unknown", innerWidth / 2),
+    fittedCanvasText(
+      context,
+      channel.unit ?? i18n.t("unit unknown"),
+      innerWidth / 2,
+    ),
     innerX + innerWidth / 2,
     rampY + 13,
   );
@@ -242,8 +248,8 @@ function drawExportLegend(
   context.stroke();
 
   const rows = [
-    ["Machine", channel.deviceName ?? "Unresolved"],
-    ["Visible points", pointCount.toLocaleString("en-US")],
+    [i18n.t("Machine"), channel.deviceName ?? i18n.t("Unresolved")],
+    [i18n.t("Visible points"), i18n.formatInteger(pointCount)],
   ];
   context.font = "10px Inter, Arial, sans-serif";
   rows.forEach(([label, value], index) => {
@@ -285,6 +291,8 @@ export function TimeLogMapWorkspace({
   timeLog,
   channel,
 }: TimeLogMapWorkspaceProps) {
+  const locale = useViewerStore((state) => state.locale);
+  const i18n = createI18n(locale);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | undefined>(undefined);
   const canvasRef = useRef<HTMLCanvasElement | undefined>(undefined);
@@ -300,7 +308,7 @@ export function TimeLogMapWorkspace({
   const baseLayerControlRef = useRef<HTMLDivElement>(null);
   const [baseLayerMenuOpen, setBaseLayerMenuOpen] = useState(false);
   const [displayFilterMenuOpen, setDisplayFilterMenuOpen] = useState(false);
-  const [liveCoordinate, setLiveCoordinate] = useState("Move over the map");
+  const [liveCoordinate, setLiveCoordinate] = useState(i18n.t("Move over the map"));
   const [pinnedCoordinate, setPinnedCoordinate] = useState<string>();
   const [pinnedScreenPosition, setPinnedScreenPosition] = useState<{
     x: number;
@@ -957,6 +965,7 @@ export function TimeLogMapWorkspace({
       drawExportLegend(
         context,
         size.x,
+        i18n,
         channel,
         classification.min,
         classification.max,
@@ -985,18 +994,16 @@ export function TimeLogMapWorkspace({
           );
           drawMapScreenshotTooltip(context, size.x, size.y, {
             anchor,
-            headerLabel: "RECORD",
+            headerLabel: i18n.t("Record").toUpperCase(),
             headerValue: `#${selectedRecordIndex + 1}`,
             formattedValue: selectedValue.formattedValue,
             unit: channel.unit,
             rows: [
               {
-                label: "Time",
-                value: new Date(
-                  timeLog.timestamps[selectedRecordIndex],
-                ).toLocaleTimeString(),
+                label: i18n.t("Time"),
+                value: i18n.formatTime(timeLog.timestamps[selectedRecordIndex]),
               },
-              { label: "Raw", value: String(selectedValue.rawValue) },
+              { label: i18n.t("Raw"), value: String(selectedValue.rawValue) },
             ],
           });
         }
@@ -1045,8 +1052,10 @@ export function TimeLogMapWorkspace({
       console.error("Executed map export failed.", error);
       setMapExportError(
         baseLayer === "none"
-          ? "The map image could not be exported."
-          : "The browser blocked pixels from the background map. Choose No background and try again.",
+          ? i18n.t("The map image could not be exported.")
+          : i18n.t(
+              "The browser blocked pixels from the background map. Choose No background and try again.",
+            ),
       );
     }
   };
@@ -1088,7 +1097,7 @@ export function TimeLogMapWorkspace({
   return (
     <main
       className={`map-workspace${pinPlacementActive ? " pin-placement-active" : ""}`}
-      aria-label="Executed ISOXML time-log map"
+      aria-label={i18n.t("Executed ISOXML time-log map")}
     >
       <div
         className="map-container"
@@ -1099,18 +1108,18 @@ export function TimeLogMapWorkspace({
         <button
           type="button"
           onClick={() => mapRef.current?.zoomIn(ZOOM_STEP, { animate: false })}
-          aria-label="Zoom in"
-          title="Zoom in"
-          data-tooltip="Zoom in"
+          aria-label={i18n.t("Zoom in")}
+          title={i18n.t("Zoom in")}
+          data-tooltip={i18n.t("Zoom in")}
         >
           <Plus size={16} />
         </button>
         <button
           type="button"
           onClick={() => mapRef.current?.zoomOut(ZOOM_STEP, { animate: false })}
-          aria-label="Zoom out"
-          title="Zoom out"
-          data-tooltip="Zoom out"
+          aria-label={i18n.t("Zoom out")}
+          title={i18n.t("Zoom out")}
+          data-tooltip={i18n.t("Zoom out")}
         >
           <Minus size={16} />
         </button>
@@ -1118,9 +1127,9 @@ export function TimeLogMapWorkspace({
         <button
           type="button"
           onClick={fitTimeLog}
-          aria-label="Fit executed points to the map"
-          title="Fit executed points to the map"
-          data-tooltip="Fit executed points to the map"
+          aria-label={i18n.t("Fit executed points to the map")}
+          title={i18n.t("Fit executed points to the map")}
+          data-tooltip={i18n.t("Fit executed points to the map")}
         >
           <Crosshair size={16} />
         </button>
@@ -1130,19 +1139,19 @@ export function TimeLogMapWorkspace({
           onClick={() => setPinPlacementMode(!pinPlacementActive)}
           aria-label={
             pinPlacementActive
-              ? "Cancel coordinate pin placement"
-              : "Place a coordinate pin"
+              ? i18n.t("Cancel coordinate pin placement")
+              : i18n.t("Place a coordinate pin")
           }
           aria-pressed={pinPlacementActive}
           title={
             pinPlacementActive
-              ? "Cancel coordinate pin placement"
-              : "Place a coordinate pin on empty map space"
+              ? i18n.t("Cancel coordinate pin placement")
+              : i18n.t("Place a coordinate pin on empty map space")
           }
           data-tooltip={
             pinPlacementActive
-              ? "Cancel coordinate pin placement"
-              : "Place a coordinate pin"
+              ? i18n.t("Cancel coordinate pin placement")
+              : i18n.t("Place a coordinate pin")
           }
         >
           <MapPin size={16} />
@@ -1151,10 +1160,10 @@ export function TimeLogMapWorkspace({
           <button
             type="button"
             className={activeDisplayFilterCount ? "active" : ""}
-            aria-label={`Configure map display filters${activeDisplayFilterCount ? `: ${activeDisplayFilterCount} active` : ""}`}
+            aria-label={`${i18n.t("Configure map display filters")}${activeDisplayFilterCount ? `: ${activeDisplayFilterCount} ${i18n.t("active")}` : ""}`}
             aria-expanded={displayFilterMenuOpen}
-            title={`Map display filters${activeDisplayFilterCount ? ` (${activeDisplayFilterCount} active)` : ""}`}
-            data-tooltip={`Map display filters${activeDisplayFilterCount ? ` (${activeDisplayFilterCount} active)` : ""}`}
+            title={`${i18n.t("Map display filters")}${activeDisplayFilterCount ? ` (${activeDisplayFilterCount} ${i18n.t("active")})` : ""}`}
+            data-tooltip={`${i18n.t("Map display filters")}${activeDisplayFilterCount ? ` (${activeDisplayFilterCount} ${i18n.t("active")})` : ""}`}
             onClick={() => {
               setDisplayFilterMenuOpen((open) => !open);
               setBaseLayerMenuOpen(false);
@@ -1166,7 +1175,7 @@ export function TimeLogMapWorkspace({
             <div
               className="map-filter-menu"
               role="menu"
-              aria-label="Map display filters"
+              aria-label={i18n.t("Map display filters")}
             >
               <button
                 type="button"
@@ -1177,11 +1186,11 @@ export function TimeLogMapWorkspace({
               >
                 <EyeOff size={14} aria-hidden="true" />
                 <span>
-                  <strong>Hide zero values</strong>
+                  <strong>{i18n.t("Hide zero values")}</strong>
                   <small>
                     {zeroValueCount
-                      ? `${zeroValueCount.toLocaleString()} displayed zeros`
-                      : "No displayed zeros"}
+                      ? `${i18n.formatInteger(zeroValueCount)} ${i18n.t("displayed zeros")}`
+                      : i18n.t("No displayed zeros")}
                   </small>
                 </span>
                 {hideEmptyCells && <Check size={14} aria-hidden="true" />}
@@ -1196,9 +1205,9 @@ export function TimeLogMapWorkspace({
               >
                 <Crop size={14} aria-hidden="true" />
                 <span>
-                  <strong>Cut to field</strong>
+                  <strong>{i18n.t("Cut to field")}</strong>
                   <small>
-                    {fieldBoundary?.name ?? "No field boundary available"}
+                    {fieldBoundary?.name ?? i18n.t("No field boundary available")}
                   </small>
                 </span>
                 {fieldClipActive && <Check size={14} aria-hidden="true" />}
@@ -1212,11 +1221,11 @@ export function TimeLogMapWorkspace({
               >
                 <Filter size={14} aria-hidden="true" />
                 <span>
-                  <strong>Hide outliers</strong>
-                  <small title="Extreme values beyond 3× IQR, with a minimum 50% typical-value guard">
+                  <strong>{i18n.t("Hide outliers")}</strong>
+                  <small title={i18n.t("Extreme values beyond 3× IQR, with a minimum 50% typical-value guard")}>
                     {outlierCount
-                      ? `${outlierCount} extreme · conservative 3× IQR`
-                      : "None detected · conservative 3× IQR"}
+                      ? `${i18n.formatInteger(outlierCount)} ${i18n.t("extreme")} · ${i18n.t("conservative 3× IQR")}`
+                      : i18n.t("None detected · conservative 3× IQR")}
                   </small>
                 </span>
                 {hideOutliers && <Check size={14} aria-hidden="true" />}
@@ -1231,11 +1240,11 @@ export function TimeLogMapWorkspace({
               setBaseLayerMenuOpen((open) => !open);
               setDisplayFilterMenuOpen(false);
             }}
-            aria-label="Choose background map"
+            aria-label={i18n.t("Choose background map")}
             aria-expanded={baseLayerMenuOpen}
             className={baseLayer !== "none" ? "active" : ""}
-            title="Choose background map"
-            data-tooltip="Choose background map"
+            title={i18n.t("Choose background map")}
+            data-tooltip={i18n.t("Choose background map")}
           >
             <Layers size={16} />
           </button>
@@ -1243,13 +1252,13 @@ export function TimeLogMapWorkspace({
             <div
               className="basemap-menu"
               role="menu"
-              aria-label="Background map"
+              aria-label={i18n.t("Background map")}
             >
               {(
                 [
-                  ["none", "No background"],
-                  ["streets", "Streets"],
-                  ["satellite", "Satellite"],
+                  ["none", i18n.t("No background")],
+                  ["streets", i18n.t("Streets")],
+                  ["satellite", i18n.t("Satellite")],
                 ] as const
               ).map(([id, label]) => (
                 <button
@@ -1264,7 +1273,7 @@ export function TimeLogMapWorkspace({
                   }}
                 >
                   <span>{label}</span>
-                  {baseLayer === id && <b>ON</b>}
+                  {baseLayer === id && <b>{i18n.t("On").toUpperCase()}</b>}
                 </button>
               ))}
             </div>
@@ -1273,9 +1282,9 @@ export function TimeLogMapWorkspace({
         <button
           type="button"
           onClick={() => void exportMap()}
-          aria-label="Export map screenshot"
-          title="Export map screenshot"
-          data-tooltip="Export map screenshot"
+          aria-label={i18n.t("Export map screenshot")}
+          title={i18n.t("Export map screenshot")}
+          data-tooltip={i18n.t("Export map screenshot")}
         >
           <Scan size={16} />
         </button>
@@ -1283,17 +1292,17 @@ export function TimeLogMapWorkspace({
 
       <div className="map-badge top-center">
         <span className="pulse-dot" />
-        TYPE {timeLog.timeLogType} TIME LOG ·{" "}
-        {timeLog.decodedRecordCount.toLocaleString()} RECORDS · CANVAS
+        {i18n.t("Type").toUpperCase()} {timeLog.timeLogType} {i18n.t("Time log").toUpperCase()} ·{" "}
+        {i18n.formatInteger(timeLog.decodedRecordCount)} {i18n.t("Records").toUpperCase()} · {i18n.t("Canvas").toUpperCase()}
       </div>
 
       {!timeLog.validPositionCount && (
         <div className="map-spatial-error" role="status">
           <AlertTriangle size={18} />
           <div>
-            <strong>No valid recorded positions</strong>
+            <strong>{i18n.t("No valid recorded positions")}</strong>
             <span>
-              The executed values remain available in the record table.
+              {i18n.t("The executed values remain available in the record table.")}
             </span>
           </div>
         </div>
@@ -1304,17 +1313,17 @@ export function TimeLogMapWorkspace({
           <AlertTriangle size={15} />
           <span>{mapExportError}</span>
           <button type="button" onClick={() => setMapExportError(undefined)}>
-            Dismiss
+            {i18n.t("Dismiss")}
           </button>
         </div>
       )}
 
-      <section className="map-legend" aria-label="Executed layer legend">
+      <section className="map-legend" aria-label={i18n.t("Executed layer legend")}>
         <div className="legend-kicker">
           <span className="layer-swatch executed" />
-          EXECUTED · ACTIVE
+          {i18n.t("Executed · active").toUpperCase()}
         </div>
-        <h2>{channel.deviceElementName ?? "Device element unresolved"}</h2>
+        <h2>{channel.deviceElementName ?? i18n.t("Device element unresolved")}</h2>
         <p>
           DDI {channel.ddiDisplay} · {channel.ddiName}
         </p>
@@ -1327,26 +1336,26 @@ export function TimeLogMapWorkspace({
           <span>
             {classification.min.toFixed(channel.presentation.decimals)}
           </span>
-          <strong>{channel.unit ?? "unit unknown"}</strong>
+          <strong>{channel.unit ?? i18n.t("unit unknown")}</strong>
           <span>
             {classification.max.toFixed(channel.presentation.decimals)}
           </span>
         </div>
         <dl>
           <div>
-            <dt>Machine</dt>
-            <dd>{channel.deviceName ?? "Unresolved"}</dd>
+            <dt>{i18n.t("Machine")}</dt>
+            <dd>{channel.deviceName ?? i18n.t("Unresolved")}</dd>
           </div>
           <div>
-            <dt>Visible points</dt>
-            <dd>{pointRecordIndexes.length.toLocaleString()}</dd>
+            <dt>{i18n.t("Visible points")}</dt>
+            <dd>{i18n.formatInteger(pointRecordIndexes.length)}</dd>
           </div>
           <div>
-            <dt>Outliers</dt>
-            <dd>{outlierCount.toLocaleString()}</dd>
+            <dt>{i18n.t("Outliers")}</dt>
+            <dd>{i18n.formatInteger(outlierCount)}</dd>
           </div>
           <div>
-            <dt>Source</dt>
+            <dt>{i18n.t("Source")}</dt>
             <dd>{timeLog.filename}</dd>
           </div>
         </dl>
@@ -1364,7 +1373,7 @@ export function TimeLogMapWorkspace({
             role={hoveredRecordIndex !== undefined ? "tooltip" : "status"}
           >
             <div className="tooltip-header">
-              <span>RECORD</span>
+              <span>{i18n.t("Record").toUpperCase()}</span>
               <strong>#{tooltipRecordIndex + 1}</strong>
             </div>
             <div className="tooltip-value">
@@ -1373,21 +1382,19 @@ export function TimeLogMapWorkspace({
             </div>
             <dl>
               <div>
-                <dt>Time</dt>
+                <dt>{i18n.t("Time")}</dt>
                 <dd>
-                  {new Date(
-                    timeLog.timestamps[tooltipRecordIndex],
-                  ).toLocaleTimeString()}
+                  {i18n.formatTime(timeLog.timestamps[tooltipRecordIndex])}
                 </dd>
               </div>
               <div>
-                <dt>Raw</dt>
+                <dt>{i18n.t("Raw")}</dt>
                 <dd>{tooltipValue.rawValue}</dd>
               </div>
             </dl>
             {hoveredRecordIndex !== undefined && (
               <span className="tooltip-hint">
-                Click to keep this record selected
+                {i18n.t("Click to keep this record selected")}
               </span>
             )}
           </div>
@@ -1401,8 +1408,8 @@ export function TimeLogMapWorkspace({
             left: pinnedScreenPosition.x,
             top: pinnedScreenPosition.y,
           }}
-          aria-label={`Remove pinned coordinate ${pinnedCoordinate}`}
-          title="Remove pinned coordinate"
+          aria-label={`${i18n.t("Remove pinned coordinate")} ${pinnedCoordinate}`}
+          title={i18n.t("Remove pinned coordinate")}
           onClick={clearPinnedCoordinate}
         >
           <MapPin size={24} aria-hidden="true" />
@@ -1418,29 +1425,29 @@ export function TimeLogMapWorkspace({
             onClick={() => void copyTextToClipboard(displayedCoordinate)}
             title={
               selectedCoordinate
-                ? "Copy selected record coordinate"
-                : "Copy pinned coordinate"
+                ? i18n.t("Copy selected record coordinate")
+                : i18n.t("Copy pinned coordinate")
             }
           >
-            COPY
+            {i18n.t("Copy").toUpperCase()}
           </button>
         ) : (
           <small>
             {pinPlacementActive
-              ? "CLICK EMPTY MAP SPACE TO SET PIN"
-              : "HOVER FOR DETAILS · CLICK A POINT TO SELECT"}
+              ? i18n.t("Click empty map space to set pin").toUpperCase()
+              : i18n.t("Hover for details · click a point to select").toUpperCase()}
           </small>
         )}
       </div>
       <div className="diagnostic-overlay">
         <Route size={13} />
-        <span>Executed path</span>
-        <strong>{timeLog.validPositionCount.toLocaleString()} positions</strong>
+        <span>{i18n.t("Executed path")}</span>
+        <strong>{i18n.t("counts.positions", { count: timeLog.validPositionCount })}</strong>
         {hideOutliers && outlierCount > 0 && (
           <>
             <span aria-hidden="true">·</span>
             <strong>
-              <Check size={12} /> {outlierCount} hidden
+              <Check size={12} /> {i18n.formatInteger(outlierCount)} {i18n.t("hidden")}
             </strong>
           </>
         )}

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import type { DdiDefinition } from "@/lib/isoxml/ddi-catalog";
 import { copyTextToClipboard } from "@/lib/client/clipboard";
+import { createI18n } from "@/lib/client/i18n";
 import { basename } from "@/lib/isoxml/file-loader";
 import { decodeValue } from "@/lib/isoxml/value-decoder";
 import type {
@@ -68,6 +69,8 @@ interface InspectorProps {
 }
 
 export function Inspector({ dataset, grid, channel }: InspectorProps) {
+  const locale = useViewerStore((state) => state.locale);
+  const i18n = createI18n(locale);
   const selectedCellIndex = useViewerStore((state) => state.selectedCellIndex);
   const setSelectedCell = useViewerStore((state) => state.setSelectedCell);
   const inspectorTab = useViewerStore((state) => state.inspectorTab);
@@ -153,42 +156,42 @@ export function Inspector({ dataset, grid, channel }: InspectorProps) {
     task?.workerName;
   const relationships: Array<
     [type: string, object: IsoXmlObject | undefined, description: string]
-  > = [["TSK", taskObject, task?.name ?? "Task unresolved"]];
+  > = [["TSK", taskObject, task?.name ?? i18n.t("Task unresolved")]];
   if (customerId) {
     relationships.push([
       "CTR",
       customerObject,
-      customerName ?? "Customer unresolved",
+      customerName ?? i18n.t("Customer unresolved"),
     ]);
   }
   if (farmId) {
     relationships.push([
       "FRM",
       farmObject,
-      `${farmName ?? "Farm unresolved"} · customer ${farmObject?.attributes.I ?? customerId ?? "unresolved"}`,
+      `${farmName ?? i18n.t("Farm unresolved")} · ${i18n.t("Customer").toLowerCase()} ${farmObject?.attributes.I ?? customerId ?? i18n.t("unresolved")}`,
     ]);
   }
   if (fieldId) {
     relationships.push([
       "PFD",
       fieldObject,
-      `${fieldName ?? "Field unresolved"} · farm ${fieldObject?.attributes.F ?? farmId ?? "unresolved"}`,
+      `${fieldName ?? i18n.t("Field unresolved")} · ${i18n.t("Farm").toLowerCase()} ${fieldObject?.attributes.F ?? farmId ?? i18n.t("unresolved")}`,
     ]);
   }
   if (workerId) {
     relationships.push([
       "WKR",
       workerObject,
-      workerName ?? "Worker unresolved",
+      workerName ?? i18n.t("Worker unresolved"),
     ]);
   }
   relationships.push(
-    ["PDV", pdvObject, "Ordered process variable"],
-    ["PDT", productObject, channel.productName ?? "Product unresolved"],
+    ["PDV", pdvObject, i18n.t("Ordered process variable")],
+    ["PDT", productObject, channel.productName ?? i18n.t("Product unresolved")],
     [
       "DET",
       deviceObject,
-      channel.deviceElementName ?? "Device element unresolved",
+      channel.deviceElementName ?? i18n.t("Device element unresolved"),
     ],
     [
       presentationObject?.elementType ?? "VPN/DVP",
@@ -236,23 +239,23 @@ export function Inspector({ dataset, grid, channel }: InspectorProps) {
   };
 
   return (
-    <aside className="right-panel" aria-label="Object inspector">
+    <aside className="right-panel" aria-label={i18n.t("Object inspector")}>
       <div className="inspector-heading">
         <div className="selection-icon">
           <MapPin size={16} />
         </div>
         <div>
-          <small>PINNED SELECTION</small>
-          <strong>Grid cell #{cellIndex}</strong>
+          <small>{i18n.t("Pinned selection").toUpperCase()}</small>
+          <strong>{i18n.t("Grid cell")} #{cellIndex}</strong>
           <span>
-            Row {row + 1} · Column {column + 1}
+            {i18n.t("Row")} {row + 1} · {i18n.t("Column")} {column + 1}
           </span>
         </div>
         <div className="selection-nav">
           <button
             type="button"
             onClick={() => navigate(-1)}
-            aria-label="Previous cell"
+            aria-label={i18n.t("Previous cell")}
             disabled={cellIndex <= 0}
           >
             <ArrowLeft size={14} />
@@ -260,7 +263,7 @@ export function Inspector({ dataset, grid, channel }: InspectorProps) {
           <button
             type="button"
             onClick={() => navigate(1)}
-            aria-label="Next cell"
+            aria-label={i18n.t("Next cell")}
             disabled={cellIndex >= grid.decodedCellCount - 1}
           >
             <ArrowRight size={14} />
@@ -270,7 +273,7 @@ export function Inspector({ dataset, grid, channel }: InspectorProps) {
       <div
         className="inspector-tabs"
         role="tablist"
-        aria-label="Inspector views"
+        aria-label={i18n.t("Inspector views")}
       >
         {INSPECTOR_TABS.map((tab) => (
           <button
@@ -281,7 +284,7 @@ export function Inspector({ dataset, grid, channel }: InspectorProps) {
             key={tab.id}
             onClick={() => setInspectorTab(tab.id)}
           >
-            {tab.label}
+            {i18n.t(tab.label)}
           </button>
         ))}
       </div>
@@ -290,7 +293,7 @@ export function Inspector({ dataset, grid, channel }: InspectorProps) {
           <>
             <section className="inspector-value-card">
               <div>
-                <small>SCALED VALUE</small>
+                <small>{i18n.t("Scaled value").toUpperCase()}</small>
                 <strong>
                   {decoded?.formattedValue ?? "—"}
                   <span>{channel.unit}</span>
@@ -302,7 +305,7 @@ export function Inspector({ dataset, grid, channel }: InspectorProps) {
                 ) : (
                   <AlertTriangle size={12} />
                 )}
-                {channel.presentation.confidence}
+                {i18n.t(channel.presentation.confidence)}
               </span>
               <div className="value-formula">
                 ({decoded?.rawValue ?? "?"} + {channel.presentation.offset}) ×{" "}
@@ -311,62 +314,62 @@ export function Inspector({ dataset, grid, channel }: InspectorProps) {
             </section>
             <section className="inspector-section">
               <div className="section-title">
-                <span>Task context</span>
+                <span>{i18n.t("Task context")}</span>
               </div>
               <dl className="property-list">
                 <div>
-                  <dt>Customer</dt>
+                  <dt>{i18n.t("Customer")}</dt>
                   <dd>
-                    {customerName ?? "Not referenced"}{" "}
+                    {customerName ?? i18n.t("Not referenced")}{" "}
                     {customerId && (
                       <span className="code-chip">{customerId}</span>
                     )}
                   </dd>
                 </div>
                 <div>
-                  <dt>Farm</dt>
+                  <dt>{i18n.t("Farm")}</dt>
                   <dd>
-                    {farmName ?? "Not referenced"}{" "}
+                    {farmName ?? i18n.t("Not referenced")}{" "}
                     {farmId && <span className="code-chip">{farmId}</span>}
                   </dd>
                 </div>
                 <div>
-                  <dt>Field</dt>
+                  <dt>{i18n.t("Field")}</dt>
                   <dd>
-                    {fieldName ?? "Not referenced"}{" "}
+                    {fieldName ?? i18n.t("Not referenced")}{" "}
                     {fieldId && <span className="code-chip">{fieldId}</span>}
                   </dd>
                 </div>
                 <div>
-                  <dt>Worker</dt>
+                  <dt>{i18n.t("Worker")}</dt>
                   <dd>
-                    {workerName ?? "Not referenced"}{" "}
+                    {workerName ?? i18n.t("Not referenced")}{" "}
                     {workerId && <span className="code-chip">{workerId}</span>}
                   </dd>
                 </div>
                 <div>
-                  <dt>Status</dt>
-                  <dd>{task?.status ?? "Unknown"}</dd>
+                  <dt>{i18n.t("Status")}</dt>
+                  <dd>{task?.status ?? i18n.t("Unknown")}</dd>
                 </div>
               </dl>
             </section>
             <section className="inspector-section">
               <div className="section-title">
-                <span>Channel identity</span>
+                <span>{i18n.t("Channel identity")}</span>
                 <button
                   type="button"
                   onClick={() => void copyTextToClipboard(channel.channelId)}
                 >
-                  <Clipboard size={12} /> COPY
+                  <Clipboard size={12} /> {i18n.t("Copy").toUpperCase()}
                 </button>
               </div>
               <dl className="property-list">
                 <div>
-                  <dt>Task</dt>
+                  <dt>{i18n.t("Task")}</dt>
                   <dd>{task?.name}</dd>
                 </div>
                 <div>
-                  <dt>Grid</dt>
+                  <dt>{i18n.t("Grid")}</dt>
                   <dd className="mono">{grid.id}</dd>
                 </div>
                 <div>
@@ -377,79 +380,84 @@ export function Inspector({ dataset, grid, channel }: InspectorProps) {
                   </dd>
                 </div>
                 <div>
-                  <dt>PDV order</dt>
+                  <dt>{i18n.t("PDV order")}</dt>
                   <dd>
-                    {channel.pdvIndex + 1} of {grid.channels.length}
+                    {channel.pdvIndex + 1} {i18n.t("of")} {grid.channels.length}
                   </dd>
                 </div>
                 <div>
-                  <dt>Product</dt>
-                  <dd>{channel.productName ?? "Allocation unresolved"}</dd>
+                  <dt>{i18n.t("Product")}</dt>
+                  <dd>{channel.productName ?? i18n.t("Allocation unresolved")}</dd>
                 </div>
                 <div>
                   <dt>DET</dt>
-                  <dd>{channel.deviceElementName ?? "Reference missing"}</dd>
+                  <dd>{channel.deviceElementName ?? i18n.t("Reference missing")}</dd>
                 </div>
                 <div>
-                  <dt>Raw value</dt>
+                  <dt>{i18n.t("Raw value")}</dt>
                   <dd className="mono">{decoded?.rawValue ?? "—"}</dd>
                 </div>
                 <div>
-                  <dt>Cell layout</dt>
+                  <dt>{i18n.t("Cell layout")}</dt>
                   <dd>
                     {grid.gridType === 2
-                      ? "Direct PDV values"
-                      : `Treatment zone ${grid.treatmentZoneCodes[cellIndex]}`}
+                      ? i18n.t("Direct PDV values")
+                      : i18n.t("Treatment zone {zone}", {
+                          zone: grid.treatmentZoneCodes[cellIndex],
+                        })}
                   </dd>
                 </div>
                 <div>
-                  <dt>Unit</dt>
-                  <dd>{channel.unit ?? "Not declared"}</dd>
+                  <dt>{i18n.t("Unit")}</dt>
+                  <dd>{channel.unit ?? i18n.t("Not declared")}</dd>
                 </div>
               </dl>
             </section>
             <section className="inspector-section">
               <div className="section-title">
-                <span>ISOBUS DDI reference</span>
+                <span>{i18n.t("ISOBUS DDI reference")}</span>
                 {ddiDefinition?.officialUrl && (
                   <a
                     href={ddiDefinition.officialUrl}
                     target="_blank"
                     rel="noreferrer"
-                    aria-label={`Open the official ISOBUS entry for DDI ${channel.ddiDisplay}`}
+                    aria-label={i18n.t(
+                      "Open the official ISOBUS entry for DDI {ddi}",
+                      { ddi: channel.ddiDisplay },
+                    )}
                   >
-                    OFFICIAL <ExternalLink size={11} />
+                    {i18n.t("Official").toUpperCase()} <ExternalLink size={11} />
                   </a>
                 )}
               </div>
               <p className="ddi-definition">
-                {ddiDefinition?.description ?? "Loading DDI reference…"}
+                {ddiDefinition?.description ?? i18n.t("Loading DDI reference…")}
               </p>
               <dl className="property-list">
                 <div>
-                  <dt>Unit symbol</dt>
-                  <dd>{ddiDefinition?.unitSymbol ?? "Not defined"}</dd>
+                  <dt>{i18n.t("Unit symbol")}</dt>
+                  <dd>{ddiDefinition?.unitSymbol ?? i18n.t("Not defined")}</dd>
                 </div>
                 <div>
-                  <dt>Bit resolution</dt>
-                  <dd>{ddiDefinition?.bitResolution ?? "Not defined"}</dd>
+                  <dt>{i18n.t("Bit resolution")}</dt>
+                  <dd>{ddiDefinition?.bitResolution ?? i18n.t("Not defined")}</dd>
                 </div>
                 <div>
-                  <dt>Display range</dt>
-                  <dd>{ddiDefinition?.displayRange ?? "Not defined"}</dd>
+                  <dt>{i18n.t("Display range")}</dt>
+                  <dd>{ddiDefinition?.displayRange ?? i18n.t("Not defined")}</dd>
                 </div>
                 <div>
-                  <dt>CANBus range</dt>
-                  <dd>{ddiDefinition?.canBusRange ?? "Not defined"}</dd>
+                  <dt>{i18n.t("CANBus range")}</dt>
+                  <dd>{ddiDefinition?.canBusRange ?? i18n.t("Not defined")}</dd>
                 </div>
                 {ddiDefinition?.comment && (
                   <div className="multiline">
-                    <dt>Comment</dt>
+                    <dt>{i18n.t("Comment")}</dt>
                     <dd>{ddiDefinition.comment}</dd>
                   </div>
                 )}
                 <div className="multiline">
-                  <dt>Device classes</dt>
+                  <dt>{i18n.t("Device classes")}</dt>
                   <dd>
                     {ddiDefinition?.deviceClasses.length
                       ? ddiDefinition.deviceClasses
@@ -458,22 +466,22 @@ export function Inspector({ dataset, grid, channel }: InspectorProps) {
                               `${deviceClass.id} – ${deviceClass.name}`,
                           )
                           .join(", ")
-                      : "Not assigned"}
+                      : i18n.t("Not assigned")}
                   </dd>
                 </div>
                 <div>
-                  <dt>Status</dt>
-                  <dd>{ddiDefinition?.status ?? "Not defined"}</dd>
+                  <dt>{i18n.t("Status")}</dt>
+                  <dd>{ddiDefinition?.status ?? i18n.t("Not defined")}</dd>
                 </div>
                 <div>
-                  <dt>Revision</dt>
-                  <dd>{ddiDefinition?.revision ?? "Not defined"}</dd>
+                  <dt>{i18n.t("Revision")}</dt>
+                  <dd>{ddiDefinition?.revision ?? i18n.t("Not defined")}</dd>
                 </div>
               </dl>
             </section>
             <section className="inspector-section">
               <div className="section-title">
-                <span>Evidence chain</span>
+                <span>{i18n.t("Evidence chain")}</span>
               </div>
               <div className="evidence-chain">
                 <span>
@@ -485,10 +493,10 @@ export function Inspector({ dataset, grid, channel }: InspectorProps) {
                 </span>
                 <i>→</i>
                 <span>
-                  {grid.gridType === 2 ? "CELL" : "TZN"}{" "}
+                  {grid.gridType === 2 ? i18n.t("Cell").toUpperCase() : "TZN"}{" "}
                   <b>
                     {grid.gridType === 2
-                      ? "DIRECT"
+                      ? i18n.t("Direct").toUpperCase()
                       : grid.treatmentZoneCodes[cellIndex]}
                   </b>
                 </span>
@@ -508,7 +516,7 @@ export function Inspector({ dataset, grid, channel }: InspectorProps) {
         {activeInspectorTab === "attributes" && (
           <section className="inspector-section flush">
             <div className="section-title">
-              <span>Raw PDV attributes</span>
+              <span>{i18n.t("Raw PDV attributes")}</span>
             </div>
             <dl className="attribute-grid">
               {Object.entries(pdvObject?.attributes ?? {}).map(
@@ -521,8 +529,9 @@ export function Inspector({ dataset, grid, channel }: InspectorProps) {
               )}
             </dl>
             <div className="source-note">
-              Compact attributes are kept verbatim. Typed names are decoded only
-              within an element-specific vocabulary.
+              {i18n.t(
+                "Compact attributes are kept verbatim. Typed names are decoded only within an element-specific vocabulary.",
+              )}
             </div>
           </section>
         )}
@@ -541,13 +550,13 @@ export function Inspector({ dataset, grid, channel }: InspectorProps) {
                   </span>
                   <div>
                     <small>{String(type)}</small>
-                    <strong>{typedObject?.id ?? "Unresolved"}</strong>
+                    <strong>{typedObject?.id ?? i18n.t("Unresolved")}</strong>
                     <p>{String(description)}</p>
                   </div>
                   {typedObject ? (
-                    <CheckCircle2 size={13} aria-label="Resolved" />
+                    <CheckCircle2 size={13} aria-label={i18n.t("Resolved")} />
                   ) : (
-                    <AlertTriangle size={13} aria-label="Unresolved" />
+                    <AlertTriangle size={13} aria-label={i18n.t("Unresolved")} />
                   )}
                 </article>
               );
@@ -559,11 +568,11 @@ export function Inspector({ dataset, grid, channel }: InspectorProps) {
           <>
             <section className="inspector-section">
               <div className="section-title">
-                <span>XML source</span>
+                <span>{i18n.t("XML source")}</span>
               </div>
               <div className="source-location">
                 <FileLabel label={pdvObject?.sourceFile ?? "TASKDATA.XML"} />
-                <code>{pdvObject?.path ?? "Path unavailable"}</code>
+                <code>{pdvObject?.path ?? i18n.t("Path unavailable")}</code>
               </div>
               <pre className="code-block">
                 {`<PDV ${Object.entries(pdvObject?.attributes ?? {})
@@ -575,27 +584,29 @@ export function Inspector({ dataset, grid, channel }: InspectorProps) {
             </section>
             <section className="inspector-section">
               <div className="section-title">
-                <span>Binary source</span>
+                <span>{i18n.t("Binary source")}</span>
                 <b>INT32 LE</b>
               </div>
               <div className="binary-offset">
-                <span>Byte offset</span>
+                <span>{i18n.t("Byte offset")}</span>
                 <strong>
                   0x{binaryOffset.toString(16).padStart(8, "0").toUpperCase()}
                 </strong>
                 <small>
-                  Cell {cellIndex} · channel {channel.pdvIndex + 1}
+                  {i18n.t("Cell {cell} · channel {channel}", {
+                    cell: cellIndex,
+                    channel: channel.pdvIndex + 1,
+                  })}
                 </small>
               </div>
               <pre className="hex-block">
                 {hexWindow(sourceBytes(dataset, grid), binaryOffset)}
               </pre>
               <button
-                type="button"
                 className="jump-source-button"
                 onClick={() => useViewerStore.getState().setBottomTab("source")}
               >
-                <Braces size={14} /> Open full source panel
+                <Braces size={14} /> {i18n.t("Open full source panel")}
               </button>
             </section>
           </>
@@ -620,7 +631,7 @@ export function Inspector({ dataset, grid, channel }: InspectorProps) {
             ) : (
               <div className="inspector-empty">
                 <CheckCircle2 size={22} />
-                No issues are attached to this selection.
+                {i18n.t("No issues are attached to this selection.")}
               </div>
             )}
           </section>

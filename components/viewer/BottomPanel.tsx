@@ -22,6 +22,7 @@ import type {
   IsoXmlDataset,
   TimeLogChannel,
 } from "@/lib/isoxml/types";
+import { createI18n } from "@/lib/client/i18n";
 import { copyTextToClipboard } from "@/lib/client/clipboard";
 import { useViewerStore, type BottomTab } from "./store";
 
@@ -45,32 +46,32 @@ const severityIcon = {
 } as const;
 
 interface MatrixColumnDefinition {
-  label: string;
+  labelKey: string;
   defaultWidth: number;
   minWidth: number;
   maxWidth: number;
 }
 
 const timeLogMatrixColumns: MatrixColumnDefinition[] = [
-  { label: "Record", defaultWidth: 62, minWidth: 52, maxWidth: 110 },
-  { label: "Time", defaultWidth: 82, minWidth: 68, maxWidth: 130 },
-  { label: "Latitude", defaultWidth: 96, minWidth: 76, maxWidth: 140 },
-  { label: "Longitude", defaultWidth: 96, minWidth: 78, maxWidth: 140 },
-  { label: "Position", defaultWidth: 92, minWidth: 72, maxWidth: 140 },
-  { label: "Raw int32", defaultWidth: 100, minWidth: 82, maxWidth: 150 },
-  { label: "Display value", defaultWidth: 112, minWidth: 92, maxWidth: 170 },
-  { label: "Unit", defaultWidth: 78, minWidth: 58, maxWidth: 120 },
+  { labelKey: "Record", defaultWidth: 62, minWidth: 52, maxWidth: 110 },
+  { labelKey: "Time", defaultWidth: 82, minWidth: 68, maxWidth: 130 },
+  { labelKey: "Latitude", defaultWidth: 96, minWidth: 76, maxWidth: 140 },
+  { labelKey: "Longitude", defaultWidth: 96, minWidth: 78, maxWidth: 140 },
+  { labelKey: "Position", defaultWidth: 92, minWidth: 72, maxWidth: 140 },
+  { labelKey: "Raw int32", defaultWidth: 100, minWidth: 82, maxWidth: 150 },
+  { labelKey: "Display value", defaultWidth: 112, minWidth: 92, maxWidth: 170 },
+  { labelKey: "Unit", defaultWidth: 78, minWidth: 58, maxWidth: 120 },
 ];
 
 const gridMatrixColumns: MatrixColumnDefinition[] = [
-  { label: "Cell", defaultWidth: 60, minWidth: 50, maxWidth: 100 },
-  { label: "Row", defaultWidth: 52, minWidth: 44, maxWidth: 90 },
-  { label: "Column", defaultWidth: 66, minWidth: 56, maxWidth: 110 },
-  { label: "Layout", defaultWidth: 70, minWidth: 58, maxWidth: 120 },
-  { label: "Raw int32", defaultWidth: 100, minWidth: 82, maxWidth: 150 },
-  { label: "Display value", defaultWidth: 112, minWidth: 92, maxWidth: 170 },
-  { label: "Unit", defaultWidth: 78, minWidth: 58, maxWidth: 120 },
-  { label: "Product", defaultWidth: 190, minWidth: 110, maxWidth: 360 },
+  { labelKey: "Cell", defaultWidth: 60, minWidth: 50, maxWidth: 100 },
+  { labelKey: "Row", defaultWidth: 52, minWidth: 44, maxWidth: 90 },
+  { labelKey: "Column", defaultWidth: 66, minWidth: 56, maxWidth: 110 },
+  { labelKey: "Layout", defaultWidth: 70, minWidth: 58, maxWidth: 120 },
+  { labelKey: "Raw int32", defaultWidth: 100, minWidth: 82, maxWidth: 150 },
+  { labelKey: "Display value", defaultWidth: 112, minWidth: 92, maxWidth: 170 },
+  { labelKey: "Unit", defaultWidth: 78, minWidth: 58, maxWidth: 120 },
+  { labelKey: "Product", defaultWidth: 190, minWidth: 110, maxWidth: 360 },
 ];
 
 function clampedColumnWidth(
@@ -156,6 +157,7 @@ function ResizableMatrixHeader({
   beginColumnResize,
   resetColumnWidth,
   setColumnWidth,
+  translateLabel,
 }: {
   columns: MatrixColumnDefinition[];
   widths: number[];
@@ -163,22 +165,25 @@ function ResizableMatrixHeader({
   beginColumnResize: (index: number, clientX: number) => void;
   resetColumnWidth: (index: number) => void;
   setColumnWidth: (index: number, width: number) => void;
+  translateLabel: (labelKey: string) => string;
 }) {
   return (
     <div className="cell-table-head" role="row" style={{ gridTemplateColumns }}>
-      {columns.map((column, index) => (
-        <span key={column.label} role="columnheader">
-          {column.label}
+      {columns.map((column, index) => {
+        const label = translateLabel(column.labelKey);
+        return (
+        <span key={column.labelKey} role="columnheader">
+          {label}
           <i
             className="cell-column-resizer"
             role="separator"
-            aria-label={`Resize ${column.label} column`}
+            aria-label={translateLabel("Resize {column} column").replace("{column}", label)}
             aria-orientation="vertical"
             aria-valuemin={column.minWidth}
             aria-valuemax={column.maxWidth}
             aria-valuenow={widths[index]}
             tabIndex={0}
-            title="Drag to resize · Double-click to reset"
+            title={translateLabel("Drag to resize · Double-click to reset")}
             onPointerDown={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -201,7 +206,7 @@ function ResizableMatrixHeader({
             }}
           />
         </span>
-      ))}
+      );})}
     </div>
   );
 }
@@ -225,6 +230,8 @@ export function BottomPanel({
   const bottomAttentionNonce = useViewerStore(
     (state) => state.bottomAttentionNonce,
   );
+  const locale = useViewerStore((state) => state.locale);
+  const i18n = createI18n(locale);
   const setBottomTab = useViewerStore((state) => state.setBottomTab);
   const setPanelCollapsed = useViewerStore((state) => state.setPanelCollapsed);
   const activeIndex =
@@ -273,27 +280,27 @@ export function BottomPanel({
         ...entry,
         label:
           (totals.get(entry.path) ?? 0) > 1
-            ? `${entry.path} · occurrence ${occurrence}`
+            ? `${entry.path} · ${i18n.t("Occurrence {count}", { count: occurrence })}`
             : entry.path,
       };
     });
-  }, [dataset.files, dataset.rawXmlByFile]);
+  }, [dataset.files, dataset.rawXmlByFile, i18n]);
   const rawSourceEntry =
     rawSourceEntries.find(
       (entry) => entry.storageKey === selectedRawSourceKey,
     ) ?? rawSourceEntries[0];
-  const rawSourceFilename = rawSourceEntry?.label ?? "XML source";
+  const rawSourceFilename = rawSourceEntry?.label ?? i18n.t("XML source");
   const rawSourceXml = rawSourceEntry?.xml;
-  const rawSourceText = rawSourceXml ?? "No XML source available.";
+  const rawSourceText = rawSourceXml ?? i18n.t("No XML source available.");
   const rawSourceLineCount = rawSourceText.split(/\r\n|\r|\n/).length;
 
   return (
     <section
       className={`bottom-panel ${attentionClass}`}
-      aria-label="Technical data panel"
+      aria-label={i18n.t("Technical data panel")}
       data-attention-cycle={bottomAttentionNonce || undefined}
     >
-      <div className="bottom-tabs" role="tablist" aria-label="Data panel views">
+      <div className="bottom-tabs" role="tablist" aria-label={i18n.t("Data panel views")}>
         {tabs
           .filter(
             (tab) =>
@@ -321,7 +328,7 @@ export function BottomPanel({
                 onClick={() => setBottomTab(tab.id)}
               >
                 <Icon size={13} />
-                {tab.id === "cells" && timeLog ? "Records" : tab.label}
+                {tab.id === "cells" && timeLog ? i18n.t("Records") : i18n.t(tab.label)}
                 {count !== undefined && <span>{count}</span>}
               </button>
             );
@@ -340,7 +347,7 @@ export function BottomPanel({
           className="panel-close-button"
           type="button"
           onClick={() => setPanelCollapsed("bottom", true)}
-          aria-label="Collapse bottom panel"
+          aria-label={i18n.t("Collapse bottom panel")}
         >
           <ChevronDown size={14} />
         </button>
@@ -355,12 +362,12 @@ export function BottomPanel({
         {bottomTab === "files" && (
           <div className="file-table">
             <div className="technical-table-head file-row">
-              <span>Name</span>
-              <span>Type</span>
-              <span>Size</span>
-              <span>Used</span>
+              <span>{i18n.t("Name")}</span>
+              <span>{i18n.t("Type")}</span>
+              <span>{i18n.t("Size")}</span>
+              <span>{i18n.t("Used")}</span>
               <span>SHA-256</span>
-              <span>Status</span>
+              <span>{i18n.t("Status")}</span>
             </div>
             <div className="technical-scroll">
               {dataset.files.map((file, fileIndex) => (
@@ -374,11 +381,11 @@ export function BottomPanel({
                     {file.path}
                   </span>
                   <span>{file.kind}</span>
-                  <span>{file.size.toLocaleString()} B</span>
-                  <span>{file.used ? "yes" : "no"}</span>
+                  <span>{i18n.formatFileSize(file.size)}</span>
+                  <span>{file.used ? i18n.t("Yes") : i18n.t("No")}</span>
                   <code>{file.checksum.slice(0, 16)}…</code>
                   <span className={`table-status ${file.validationStatus}`}>
-                    {file.validationStatus}
+                    {i18n.t(file.validationStatus)}
                   </span>
                 </div>
               ))}
@@ -388,11 +395,11 @@ export function BottomPanel({
         {bottomTab === "issues" && (
           <div className="issue-table">
             <div className="technical-table-head issue-row">
-              <span>Severity</span>
-              <span>Code</span>
-              <span>Message</span>
-              <span>Source</span>
-              <span>Recovery</span>
+              <span>{i18n.t("Severity")}</span>
+              <span>{i18n.t("Code")}</span>
+              <span>{i18n.t("Message")}</span>
+              <span>{i18n.t("Source")}</span>
+              <span>{i18n.t("Recovery")}</span>
             </div>
             <div className="technical-scroll">
               {sortedIssues.map((issue, issueIndex) => {
@@ -408,51 +415,51 @@ export function BottomPanel({
                       onClick={() =>
                         setExpandedIssueId(expanded ? undefined : issueKey)
                       }
-                      title="Show explanation and suggested action"
+                      title={i18n.t("Show explanation and suggested action")}
                     >
                       <span className={`severity-text ${issue.severity}`}>
                         <SeverityIcon size={14} aria-hidden="true" />
-                        {issue.severity}
+                        {i18n.t(issue.severity)}
                       </span>
                       <code>{issue.code}</code>
                       <span>{issue.message}</span>
                       <span>
-                        {issue.filename ?? issue.objectId ?? "dataset"}
+                        {issue.filename ?? issue.objectId ?? i18n.t("dataset")}
                       </span>
                       <span>
-                        {issue.recovered ? "Recovered" : "Needs action"}
+                        {issue.recovered ? i18n.t("Recovered") : i18n.t("Needs action")}
                       </span>
                     </button>
                     {expanded && (
                       <div className="issue-detail">
                         <div>
-                          <small>WHAT THIS MEANS</small>
+                          <small>{i18n.t("What this means").toUpperCase()}</small>
                           <p>{issue.explanation}</p>
                         </div>
                         <div>
-                          <small>SUGGESTED ACTION</small>
+                          <small>{i18n.t("Suggested action").toUpperCase()}</small>
                           <p>{issue.suggestedAction}</p>
                         </div>
                         <dl>
                           <div>
-                            <dt>Category</dt>
+                            <dt>{i18n.t("Category")}</dt>
                             <dd>{issue.category}</dd>
                           </div>
                           <div>
-                            <dt>Source</dt>
+                            <dt>{i18n.t("Source")}</dt>
                             <dd>
                               {issue.path ??
                                 issue.filename ??
                                 issue.objectId ??
-                                "Dataset"}
+                                i18n.t("Dataset")}
                             </dd>
                           </div>
                           <div>
-                            <dt>Result impact</dt>
+                            <dt>{i18n.t("Result impact")}</dt>
                             <dd>
                               {issue.resultsMayBeIncomplete
-                                ? "May be incomplete"
-                                : "No known loss"}
+                                ? i18n.t("May be incomplete")
+                                : i18n.t("No known loss")}
                             </dd>
                           </div>
                         </dl>
@@ -469,7 +476,7 @@ export function BottomPanel({
             <div className="source-toolbar">
               {rawSourceEntries.length > 1 ? (
                 <select
-                  aria-label="XML source file"
+                  aria-label={i18n.t("XML source file")}
                   value={rawSourceEntry?.storageKey}
                   onChange={(event) =>
                     setSelectedRawSourceKey(event.target.value)
@@ -489,7 +496,7 @@ export function BottomPanel({
                 className="source-copy"
                 onClick={() => void copyTextToClipboard(rawSourceXml ?? "")}
               >
-                <Copy size={13} /> Copy XML
+                <Copy size={13} /> {i18n.t("Copy XML")}
               </button>
             </div>
             <div className="raw-source-scroll">
@@ -514,6 +521,8 @@ function TimeLogMatrix({
   timeLog: DecodedTimeLog;
   channel: TimeLogChannel;
 }) {
+  const locale = useViewerStore((state) => state.locale);
+  const i18n = createI18n(locale);
   const scrollRef = useRef<HTMLDivElement>(null);
   const selectedRecordIndex = useViewerStore(
     (state) => state.selectedCellIndex,
@@ -536,14 +545,18 @@ function TimeLogMatrix({
     <div
       className="cell-table"
       role="table"
-      aria-label="Executed time-log records"
+      aria-label={i18n.t("Executed time-log records")}
     >
       <div className="cell-table-scroll" ref={scrollRef}>
         <div
           className="cell-table-width"
           style={{ minWidth: columns.minimumTableWidth }}
         >
-          <ResizableMatrixHeader columns={timeLogMatrixColumns} {...columns} />
+          <ResizableMatrixHeader
+            columns={timeLogMatrixColumns}
+            translateLabel={i18n.t}
+            {...columns}
+          />
           <div
             className="cell-table-virtual-body"
             style={{ height: virtualizer.getTotalSize() }}
@@ -562,7 +575,7 @@ function TimeLogMatrix({
                   : decodeValue(raw, channel.presentation);
               const values = [
                 index + 1,
-                new Date(timeLog.timestamps[index]).toLocaleTimeString(),
+                i18n.formatTime(timeLog.timestamps[index]),
                 Number.isFinite(timeLog.latitudes[index])
                   ? timeLog.latitudes[index].toFixed(7)
                   : "—",
@@ -570,8 +583,8 @@ function TimeLogMatrix({
                   ? timeLog.longitudes[index].toFixed(7)
                   : "—",
                 timeLog.validPositions[index]
-                  ? `Valid · ${timeLog.positionStatus[index]}`
-                  : "Invalid",
+                  ? `${i18n.t("Valid")} · ${timeLog.positionStatus[index]}`
+                  : i18n.t("Invalid"),
                 raw ?? "—",
                 decoded?.formattedValue ?? "—",
                 channel.unit ?? "—",
@@ -612,6 +625,8 @@ function CellMatrix({
   channel: GridChannel;
   activeIndex: number;
 }) {
+  const locale = useViewerStore((state) => state.locale);
+  const i18n = createI18n(locale);
   const scrollRef = useRef<HTMLDivElement>(null);
   const selectedCellIndex = useViewerStore((state) => state.selectedCellIndex);
   const setSelectedCell = useViewerStore((state) => state.setSelectedCell);
@@ -636,14 +651,18 @@ function CellMatrix({
     <div
       className="cell-table"
       role="table"
-      aria-label="Grid channel cell values"
+      aria-label={i18n.t("Grid channel cell values")}
     >
       <div className="cell-table-scroll" ref={scrollRef}>
         <div
           className="cell-table-width"
           style={{ minWidth: columns.minimumTableWidth }}
         >
-          <ResizableMatrixHeader columns={gridMatrixColumns} {...columns} />
+          <ResizableMatrixHeader
+            columns={gridMatrixColumns}
+            translateLabel={i18n.t}
+            {...columns}
+          />
           <div
             className="cell-table-virtual-body"
             style={{ height: virtualizer.getTotalSize() }}
@@ -656,11 +675,11 @@ function CellMatrix({
                 index,
                 Math.floor(index / grid.columns) + 1,
                 (index % grid.columns) + 1,
-                grid.gridType === 2 ? "Direct" : grid.treatmentZoneCodes[index],
+                grid.gridType === 2 ? i18n.t("Direct") : grid.treatmentZoneCodes[index],
                 decoded.rawValue,
                 decoded.formattedValue,
                 channel.unit ?? "—",
-                channel.productName ?? "Unresolved",
+                channel.productName ?? i18n.t("Unresolved"),
               ];
               return (
                 <button
