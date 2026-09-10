@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import fc from "fast-check";
+import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import {
   analyzePackageTransform,
@@ -14,7 +15,11 @@ import {
 } from "@/lib/isoxml/spatial";
 import type { IsoXmlDataset, ValidationIssue } from "@/lib/isoxml/types";
 import { decodeValue } from "@/lib/isoxml/value-decoder";
-import { gridChannelCsv, gridChannelGeoJson } from "@/lib/isoxml/export";
+import {
+  gridChannelCsv,
+  gridChannelGeoJson,
+  gridChannelShapefileZip,
+} from "@/lib/isoxml/export";
 
 const fixtureRoot = new URL("../../public/demo/", import.meta.url);
 
@@ -175,12 +180,25 @@ describe("synthetic multi-PDV Type 2 vertical slice", () => {
     const channel = grid.channels[0];
     const csv = gridChannelCsv(grid, channel);
     const geoJson = JSON.parse(gridChannelGeoJson(dataset, grid, channel));
+    const shapefileZip = await JSZip.loadAsync(
+      await (await gridChannelShapefileZip(dataset, grid, channel)).arrayBuffer(),
+    );
 
     expect(csv.split("\r\n")).toHaveLength(grid.decodedCellCount + 1);
     expect(geoJson.features).toHaveLength(grid.decodedCellCount);
+    expect(geoJson.type).toBe("FeatureCollection");
     expect(geoJson.features[0].geometry.coordinates[0][0][1]).toBeLessThan(
       geoJson.features[0].geometry.coordinates[0][2][1],
     );
+    expect(
+      Object.keys(shapefileZip.files).some((path) => path.endsWith(".shp")),
+    ).toBe(true);
+    expect(
+      Object.keys(shapefileZip.files).some((path) => path.endsWith(".shx")),
+    ).toBe(true);
+    expect(
+      Object.keys(shapefileZip.files).some((path) => path.endsWith(".dbf")),
+    ).toBe(true);
     expect(() =>
       gridChannelCsv(grid, { ...channel, channelId: "missing" }),
     ).toThrow(/does not belong/);

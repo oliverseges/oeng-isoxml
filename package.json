@@ -33,6 +33,7 @@
     "ddi:sync": "node scripts/sync-isobus-ddi.mjs"
   },
   "dependencies": {
+    "@mapbox/shp-write": "^0.4.3",
     "@tanstack/react-virtual": "^3.13.12",
     "decimal.js": "^10.6.0",
     "fast-xml-parser": "^5.2.5",

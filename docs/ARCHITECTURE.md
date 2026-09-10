@@ -82,7 +82,7 @@ removed. The editor does not synthesize a new DVC/DOR/DPD/DPT graph.
 
 ## Initial vertical slice
 
-The runnable slice covers local files and ZIPs, exact raw XML plus an ordered object index, task/product/treatment-zone/device/value-presentation relationships, Type 2 grids with independently selectable PDVs, Type 1 time logs with sparse DLV channels, decimal-safe scaling, Leaflet canvas rendering, selection inspection, file manifest, issue list and planned/executed CSV and map-image export. A GeoJSON serializer exists as a library adapter but is not exposed in the current UI.
+The runnable slice covers local files and ZIPs, exact raw XML plus an ordered object index, task/product/treatment-zone/device/value-presentation relationships, Type 2 grids with independently selectable PDVs, Type 1 time logs with sparse DLV channels, decimal-safe scaling, Leaflet canvas rendering, selection inspection, file manifest, issue list and planned/executed CSV, GeoJSON, shapefile and map-image export. GeoJSON is also the intermediate format behind the shapefile path.
 
 Planned and executed map containers are observed directly for size changes. Panel collapse, panel expansion, pointer resizing and responsive layout changes invalidate the Leaflet viewport and repaint the canvas without changing the active layer. Explicit CSS grid columns keep the map in the centre track even when either side panel is unmounted.
 

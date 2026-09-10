@@ -20,7 +20,11 @@ import {
   downloadBlob,
   downloadText,
   gridChannelCsv,
+  gridChannelGeoJson,
+  gridChannelShapefileZip,
+  timeLogChannelGeoJson,
   timeLogChannelCsv,
+  timeLogChannelShapefileZip,
 } from "@/lib/isoxml/export";
 import {
   applyTimeLogAdapter as applyTimeLogAdapterInWorker,
@@ -38,6 +42,7 @@ import { BottomPanel } from "./BottomPanel";
 import { DatasetTree } from "./DatasetTree";
 import { Inspector } from "./Inspector";
 import { MapWorkspace } from "./MapWorkspace";
+import type { ExportAction } from "./TopBar";
 import { TimeLogInspector } from "./TimeLogInspector";
 import { TimeLogAdapterWorkspace } from "./TimeLogAdapterControl";
 import { TimeLogMapWorkspace } from "./TimeLogMapWorkspace";
@@ -400,24 +405,152 @@ export function ViewerApp() {
     setPanelSize(panel, currentSize + delta);
   };
 
-  const exportActive = () => {
-    if (!dataset) return;
-    if (activeGrid && activeChannel) {
-      downloadText(
-        gridChannelCsv(activeGrid, activeChannel),
-        `${activeGrid.id}-${activeChannel.ddiDisplay}-${activeChannel.productId ?? "channel"}.csv`,
-        "text/csv;charset=utf-8",
+  const exportGridCsv = () => {
+    if (!activeGrid || !activeChannel) return;
+    setImportError(undefined);
+    downloadText(
+      gridChannelCsv(activeGrid, activeChannel),
+      `${activeGrid.id}-${activeChannel.ddiDisplay}-${activeChannel.productId ?? "channel"}.csv`,
+      "text/csv;charset=utf-8",
+    );
+  };
+
+  const exportGridGeoJson = () => {
+    if (!dataset || !activeGrid || !activeChannel) return;
+    setImportError(undefined);
+    downloadText(
+      gridChannelGeoJson(dataset, activeGrid, activeChannel),
+      `${activeGrid.id}-${activeChannel.ddiDisplay}-${activeChannel.productId ?? "channel"}.geojson`,
+      "application/geo+json;charset=utf-8",
+    );
+  };
+
+  const exportGridShapefile = async () => {
+    if (!dataset || !activeGrid || !activeChannel) return;
+    try {
+      setImportError(undefined);
+      const blob = await gridChannelShapefileZip(
+        dataset,
+        activeGrid,
+        activeChannel,
       );
-      return;
-    }
-    if (activeTimeLog && activeTimeLogChannel) {
-      downloadText(
-        timeLogChannelCsv(activeTimeLog, activeTimeLogChannel),
-        `${activeTimeLog.id}-${activeTimeLogChannel.ddiDisplay}-${activeTimeLogChannel.deviceElementId ?? "channel"}.csv`,
-        "text/csv;charset=utf-8",
+      downloadBlob(
+        blob,
+        `${activeGrid.id}-${activeChannel.ddiDisplay}-${activeChannel.productId ?? "channel"}.zip`,
+      );
+    } catch (error) {
+      console.error("Shapefile export failed.", error);
+      setImportError(
+        error instanceof Error
+          ? error.message
+          : "The shapefile export could not be created.",
       );
     }
   };
+
+  const exportTimeLogCsv = () => {
+    if (!activeTimeLog || !activeTimeLogChannel) return;
+    setImportError(undefined);
+    downloadText(
+      timeLogChannelCsv(activeTimeLog, activeTimeLogChannel),
+      `${activeTimeLog.id}-${activeTimeLogChannel.ddiDisplay}-${activeTimeLogChannel.deviceElementId ?? "channel"}.csv`,
+      "text/csv;charset=utf-8",
+    );
+  };
+
+  const exportTimeLogGeoJson = () => {
+    if (!dataset || !activeTimeLog || !activeTimeLogChannel) return;
+    setImportError(undefined);
+    downloadText(
+      timeLogChannelGeoJson(dataset, activeTimeLog, activeTimeLogChannel),
+      `${activeTimeLog.id}-${activeTimeLogChannel.ddiDisplay}-${activeTimeLogChannel.deviceElementId ?? "channel"}.geojson`,
+      "application/geo+json;charset=utf-8",
+    );
+  };
+
+  const exportTimeLogShapefile = async () => {
+    if (!dataset || !activeTimeLog || !activeTimeLogChannel) return;
+    try {
+      setImportError(undefined);
+      const blob = await timeLogChannelShapefileZip(
+        dataset,
+        activeTimeLog,
+        activeTimeLogChannel,
+      );
+      downloadBlob(
+        blob,
+        `${activeTimeLog.id}-${activeTimeLogChannel.ddiDisplay}-${activeTimeLogChannel.deviceElementId ?? "channel"}.zip`,
+      );
+    } catch (error) {
+      console.error("Executed shapefile export failed.", error);
+      setImportError(
+        error instanceof Error
+          ? error.message
+          : "The shapefile export could not be created.",
+      );
+    }
+  };
+
+  const exportActions: ExportAction[] = activeGrid && activeChannel
+    ? [
+        {
+          id: "grid-csv",
+          label: "Export as CSV",
+          description: "Cell coordinates, raw values, and scaled values in a flat table.",
+          ariaLabel: "Export selected data channel as CSV",
+          title: "Export active channel as CSV",
+          onSelect: exportGridCsv,
+        },
+        {
+          id: "grid-shapefile",
+          label: "Export as Shapefile (.zip)",
+          description:
+            "Grid cells as polygon features in a zipped Shapefile bundle.",
+          ariaLabel: "Export selected data channel as Shapefile",
+          title: "Export active channel as Shapefile (.zip)",
+          onSelect: exportGridShapefile,
+        },
+        {
+          id: "grid-geojson",
+          label: "Export as GeoJSON",
+          description:
+            "Grid cells as polygon features with raw and scaled properties.",
+          ariaLabel: "Export selected data channel as GeoJSON",
+          title: "Export active channel as GeoJSON",
+          onSelect: exportGridGeoJson,
+        },
+      ]
+    : activeTimeLog && activeTimeLogChannel
+      ? [
+          {
+            id: "timelog-csv",
+            label: "Export as CSV",
+            description:
+              "Decoded time-log records with timestamps, positions, and values.",
+            ariaLabel: "Export selected data channel as CSV",
+            title: "Export active channel as CSV",
+            onSelect: exportTimeLogCsv,
+          },
+          {
+            id: "timelog-shapefile",
+            label: "Export as Shapefile (.zip)",
+            description:
+              "Positioned executed records as point features in a zipped Shapefile bundle.",
+            ariaLabel: "Export selected data channel as Shapefile",
+            title: "Export active channel as Shapefile (.zip)",
+            onSelect: exportTimeLogShapefile,
+          },
+          {
+            id: "timelog-geojson",
+            label: "Export as GeoJSON",
+            description:
+              "Executed records as GeoJSON features with point geometry when positions are valid.",
+            ariaLabel: "Export selected data channel as GeoJSON",
+            title: "Export active channel as GeoJSON",
+            onSelect: exportTimeLogGeoJson,
+          },
+        ]
+      : [];
 
   const createVariant = async (
     plan: PackageTransformPlan,
@@ -501,12 +634,7 @@ export function ViewerApp() {
           setTransformDialogNonce((current) => current + 1);
           setTransformDialogOpen(true);
         }}
-        onExport={exportActive}
-        canExport={Boolean(
-          dataset &&
-          ((activeGrid && activeChannel) ||
-            (activeTimeLog && activeTimeLogChannel)),
-        )}
+        exportActions={exportActions}
         onTheme={toggleTheme}
         onValidation={() => setBottomTab("issues")}
         theme={theme}

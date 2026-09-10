@@ -12,7 +12,7 @@
 | Truncated/trailing bytes        | length only | complete-record recovery |
 | Canvas visualization            | no          | yes                      |
 | Cell hover/select/GPS pin/table | no          | yes                      |
-| CSV/GeoJSON                     | no          | CSV UI; GeoJSON library  |
+| CSV/Shapefile/GeoJSON           | no          | CSV UI; Shapefile UI; GeoJSON UI      |
 | Rotation                        | no          | no                       |
 
 The Type 2 row describes the explicit layout in `BINARY_DECODING_NOTES.md`, not universal ISOXML Type 2 conformance.

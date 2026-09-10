@@ -27,8 +27,9 @@
 | Invalid/missing-position records    | table and inspector; omitted from map   |
 | Timeline/playback                   | no                                      |
 | CSV export                          | yes, active executed channel            |
+| GeoJSON export                      | yes, active executed channel            |
+| Shapefile export                    | yes, active executed channel as ZIP     |
 | Map-image export                    | yes, active executed channel as PNG     |
-| GeoJSON export                      | no                                      |
 | Other time-log types                | raw source/bytes retained, not decoded  |
 
 Every registered adapter probes the declaration, companion template and binary evidence. A unique high-confidence match is selected automatically. Otherwise the source stays preserved and the data panel offers compatible manual choices; the selected adapter and its evidence are stored with the dataset. The permissive PTN compatibility adapter never overrides a conflicting declaration automatically.

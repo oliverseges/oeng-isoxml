@@ -15,6 +15,15 @@ import {
 } from "lucide-react";
 import type { IsoXmlDataset } from "@/lib/isoxml/types";
 
+export interface ExportAction {
+  id: string;
+  label: string;
+  description: string;
+  ariaLabel: string;
+  title: string;
+  onSelect: () => void | Promise<void>;
+}
+
 interface TopBarProps {
   dataset?: IsoXmlDataset;
   recentDatasets: IsoXmlDataset[];
@@ -23,8 +32,7 @@ interface TopBarProps {
   onClearDatasets: () => void;
   onImportFiles: (files: FileList | null) => void;
   onTransform: () => void;
-  onExport: () => void;
-  canExport: boolean;
+  exportActions: ExportAction[];
   onTheme: () => void;
   onValidation: () => void;
   theme: "dark" | "light";
@@ -38,14 +46,15 @@ export function TopBar({
   onClearDatasets,
   onImportFiles,
   onTransform,
-  onExport,
-  canExport,
+  exportActions,
   onTheme,
   onValidation,
   theme,
 }: TopBarProps) {
   const [datasetMenuOpen, setDatasetMenuOpen] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const datasetMenuRef = useRef<HTMLDivElement>(null);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
   const errorCount =
     dataset?.issues.filter((issue) => issue.severity === "error").length ?? 0;
   const warningCount =
@@ -68,14 +77,20 @@ export function TopBar({
   );
 
   useEffect(() => {
-    if (!datasetMenuOpen) return;
+    if (!datasetMenuOpen && !exportMenuOpen) return;
     const closeOnOutsideClick = (event: PointerEvent) => {
-      if (!datasetMenuRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (!datasetMenuRef.current?.contains(target)) {
         setDatasetMenuOpen(false);
+      }
+      if (!exportMenuRef.current?.contains(target)) {
+        setExportMenuOpen(false);
       }
     };
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setDatasetMenuOpen(false);
+      if (event.key !== "Escape") return;
+      setDatasetMenuOpen(false);
+      setExportMenuOpen(false);
     };
     window.addEventListener("pointerdown", closeOnOutsideClick);
     window.addEventListener("keydown", closeOnEscape);
@@ -83,7 +98,10 @@ export function TopBar({
       window.removeEventListener("pointerdown", closeOnOutsideClick);
       window.removeEventListener("keydown", closeOnEscape);
     };
-  }, [datasetMenuOpen]);
+  }, [datasetMenuOpen, exportMenuOpen]);
+
+  const hasExportMenu = exportActions.length > 1;
+  const primaryExportAction = exportActions[0];
 
   return (
     <header className="topbar">
@@ -242,16 +260,64 @@ export function TopBar({
             }}
           />
         </label>
-        <button
-          className="icon-button"
-          type="button"
-          onClick={onExport}
-          disabled={!canExport}
-          aria-label="Export selected data channel as CSV"
-          title="Export active channel as CSV"
-        >
-          <Download size={16} />
-        </button>
+        <div className="export-menu-wrap" ref={exportMenuRef}>
+          <button
+            className="secondary-button topbar-button export-trigger"
+            type="button"
+            onClick={() => {
+              setDatasetMenuOpen(false);
+              if (!hasExportMenu) {
+                void primaryExportAction?.onSelect();
+                return;
+              }
+              setExportMenuOpen((open) => !open);
+            }}
+            disabled={!exportActions.length}
+            aria-label={
+              hasExportMenu
+                ? "Export selected data channel"
+                : (primaryExportAction?.ariaLabel ??
+                  "Export selected data channel")
+            }
+            aria-haspopup={hasExportMenu ? "menu" : undefined}
+            aria-expanded={hasExportMenu ? exportMenuOpen : undefined}
+            title={
+              hasExportMenu
+                ? "Export active channel"
+                : (primaryExportAction?.title ?? "Export active channel")
+            }
+          >
+            <Download size={15} aria-hidden="true" />
+            <span>Export</span>
+            {hasExportMenu && (
+              <ChevronDown
+                size={14}
+                aria-hidden="true"
+                className={exportMenuOpen ? "open" : ""}
+              />
+            )}
+          </button>
+          {hasExportMenu && exportMenuOpen && (
+            <div className="export-menu" role="menu" aria-label="Export options">
+              {exportActions.map((action) => (
+                <button
+                  key={action.id}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setExportMenuOpen(false);
+                    void action.onSelect();
+                  }}
+                  aria-label={action.ariaLabel}
+                  title={action.title}
+                >
+                  <strong>{action.label}</strong>
+                  <small>{action.description}</small>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );

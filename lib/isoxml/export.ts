@@ -1,3 +1,4 @@
+import { zip as zipShapefile } from "@mapbox/shp-write";
 import { decodeValue } from "./value-decoder";
 import { geographicCellBounds, geographicCellCenter } from "./spatial";
 import type {
@@ -20,6 +21,21 @@ function channelIndexFor(grid: DecodedGrid, channel: GridChannel): number {
   if (channelIndex < 0 || !grid.rawValues[channelIndex]) {
     throw new Error(
       `Channel ${channel.channelId} does not belong to grid ${grid.id}.`,
+    );
+  }
+  return channelIndex;
+}
+
+function timeLogChannelIndexFor(
+  timeLog: DecodedTimeLog,
+  channel: TimeLogChannel,
+): number {
+  const channelIndex = timeLog.channels.findIndex(
+    (candidate) => candidate.channelId === channel.channelId,
+  );
+  if (channelIndex < 0 || !timeLog.rawValues[channelIndex]) {
+    throw new Error(
+      `Channel ${channel.channelId} does not belong to time log ${timeLog.id}.`,
     );
   }
   return channelIndex;
@@ -86,14 +102,7 @@ export function timeLogChannelCsv(
   timeLog: DecodedTimeLog,
   channel: TimeLogChannel,
 ): string {
-  const channelIndex = timeLog.channels.findIndex(
-    (candidate) => candidate.channelId === channel.channelId,
-  );
-  if (channelIndex < 0 || !timeLog.rawValues[channelIndex]) {
-    throw new Error(
-      `Channel ${channel.channelId} does not belong to time log ${timeLog.id}.`,
-    );
-  }
+  const channelIndex = timeLogChannelIndexFor(timeLog, channel);
   const rows: unknown[][] = [
     [
       "task_id",
@@ -211,6 +220,119 @@ export function gridChannelGeoJson(
     null,
     2,
   );
+}
+
+export async function gridChannelShapefileZip(
+  dataset: IsoXmlDataset,
+  grid: DecodedGrid,
+  channel: GridChannel,
+): Promise<Blob> {
+  const baseName = safeDownloadFilename(
+    `${grid.id}-${channel.ddiDisplay}-${channel.productId ?? "channel"}`,
+  );
+  const geoJson = JSON.parse(gridChannelGeoJson(dataset, grid, channel));
+
+  return zipShapefile<"blob">(geoJson, {
+    compression: "DEFLATE",
+    outputType: "blob",
+    folder: safeDownloadFilename(dataset.title),
+    filename: baseName,
+    types: {
+      polygon: baseName,
+    },
+  });
+}
+
+export function timeLogChannelGeoJson(
+  dataset: IsoXmlDataset,
+  timeLog: DecodedTimeLog,
+  channel: TimeLogChannel,
+): string {
+  const channelIndex = timeLogChannelIndexFor(timeLog, channel);
+  const features = Array.from(
+    { length: timeLog.decodedRecordCount },
+    (_, index) => {
+      const present = Boolean(timeLog.valuePresent[channelIndex][index]);
+      const rawValue = present
+        ? timeLog.rawValues[channelIndex][index]
+        : undefined;
+      const decoded =
+        rawValue === undefined
+          ? undefined
+          : decodeValue(rawValue, channel.presentation);
+      const latitude = timeLog.latitudes[index];
+      const longitude = timeLog.longitudes[index];
+      const hasPoint =
+        Boolean(timeLog.validPositions[index]) &&
+        Number.isFinite(latitude) &&
+        Number.isFinite(longitude);
+
+      return {
+        type: "Feature",
+        geometry: hasPoint
+          ? {
+              type: "Point",
+              coordinates: [longitude, latitude],
+            }
+          : null,
+        properties: {
+          taskId: timeLog.taskId,
+          timeLogId: timeLog.id,
+          sourceFile: timeLog.filename,
+          recordIndex: index,
+          timestamp: new Date(timeLog.timestamps[index]).toISOString(),
+          latitude: Number.isFinite(latitude) ? latitude : null,
+          longitude: Number.isFinite(longitude) ? longitude : null,
+          positionStatus: timeLog.positionStatus[index],
+          positionValid: Boolean(timeLog.validPositions[index]),
+          dlvIndex: channel.dlvIndex,
+          ddi: channel.ddiDisplay,
+          machine: channel.deviceName,
+          deviceElement: channel.deviceElementName,
+          valuePresent: present,
+          rawValue: rawValue ?? null,
+          scaledValue: decoded?.numericValue ?? null,
+          formattedValue: decoded?.formattedValue ?? null,
+          unit: channel.unit,
+        },
+      };
+    },
+  );
+
+  return JSON.stringify(
+    {
+      type: "FeatureCollection",
+      name: `${dataset.title} · ${channel.label}`,
+      features,
+    },
+    null,
+    2,
+  );
+}
+
+export async function timeLogChannelShapefileZip(
+  dataset: IsoXmlDataset,
+  timeLog: DecodedTimeLog,
+  channel: TimeLogChannel,
+): Promise<Blob> {
+  const baseName = safeDownloadFilename(
+    `${timeLog.id}-${channel.ddiDisplay}-${channel.deviceElementId ?? "channel"}`,
+  );
+  const geoJson = JSON.parse(timeLogChannelGeoJson(dataset, timeLog, channel));
+  geoJson.features = geoJson.features.filter(
+    (feature: { geometry: { type: string } | null }) =>
+      feature.geometry?.type === "Point",
+  );
+
+  return zipShapefile<"blob">(geoJson, {
+    compression: "DEFLATE",
+    outputType: "blob",
+    folder: safeDownloadFilename(dataset.title),
+    filename: baseName,
+    types: {
+      point: baseName,
+    },
+  });
 }
 
 function safeDownloadFilename(filename: string): string {

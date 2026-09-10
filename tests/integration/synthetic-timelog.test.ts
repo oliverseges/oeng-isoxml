@@ -1,7 +1,12 @@
+import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { analyzePackageTransform } from "@/lib/isoxml/package-transform";
 import { buildDataset } from "@/lib/isoxml/pipeline";
 import { redecodeDatasetTimeLog } from "@/lib/isoxml/timelog-adapters";
+import {
+  timeLogChannelGeoJson,
+  timeLogChannelShapefileZip,
+} from "@/lib/isoxml/export";
 
 function arrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.slice().buffer;
@@ -111,6 +116,33 @@ describe("time-log package pipeline", () => {
     expect(accepted.blockers).toEqual([]);
     expect(accepted.changes[0]).toContain("Delete executed log TLG00001");
     expect(accepted.warnings[0]).toContain("HIGH RISK");
+
+    const geoJson = JSON.parse(
+      timeLogChannelGeoJson(dataset, dataset.timeLogs[0], dataset.timeLogs[0].channels[0]),
+    );
+    const shapefileZip = await JSZip.loadAsync(
+      await (
+        await timeLogChannelShapefileZip(
+          dataset,
+          dataset.timeLogs[0],
+          dataset.timeLogs[0].channels[0],
+        )
+      ).arrayBuffer(),
+    );
+
+    expect(geoJson.type).toBe("FeatureCollection");
+    expect(geoJson.features).toHaveLength(1);
+    expect(geoJson.features[0].geometry.type).toBe("Point");
+    expect(geoJson.features[0].properties.scaledValue).toBe(42);
+    expect(
+      Object.keys(shapefileZip.files).some((path) => path.endsWith(".shp")),
+    ).toBe(true);
+    expect(
+      Object.keys(shapefileZip.files).some((path) => path.endsWith(".shx")),
+    ).toBe(true);
+    expect(
+      Object.keys(shapefileZip.files).some((path) => path.endsWith(".dbf")),
+    ).toBe(true);
   });
 
   it("retains an uncertain log until a manual adapter re-decodes it", async () => {

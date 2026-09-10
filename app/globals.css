@@ -378,6 +378,59 @@ a:focus-visible {
   border-top: 1px solid var(--line-soft);
 }
 
+.export-menu-wrap {
+  position: relative;
+}
+
+.export-trigger {
+  min-width: 0;
+}
+
+.export-trigger > svg:last-child.open {
+  transform: rotate(180deg);
+}
+
+.export-menu {
+  position: absolute;
+  z-index: 2200;
+  top: calc(100% + 9px);
+  right: 0;
+  width: min(280px, calc(100vw - 28px));
+  padding: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+}
+
+.export-menu button {
+  display: grid;
+  width: 100%;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  color: var(--muted);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.export-menu button:hover,
+.export-menu button:focus-visible {
+  color: var(--text);
+  background: var(--panel-hover);
+}
+
+.export-menu strong {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.export-menu small {
+  color: var(--faint);
+  font-size: 11px;
+}
+
 .dataset-search-row {
   display: flex;
   align-items: center;

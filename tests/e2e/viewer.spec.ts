@@ -20,6 +20,49 @@ async function createFixtureZip(outputPath: string) {
   await writeFile(outputPath, await zip.generateAsync({ type: "nodebuffer" }));
 }
 
+async function createTimeLogFixtureFiles(outputDir: string) {
+  const taskDataPath = path.join(outputDir, "TASKDATA.XML");
+  const headerPath = path.join(outputDir, "TLG00001.XML");
+  const binaryPath = path.join(outputDir, "TLG00001.BIN");
+  const bytes = new Uint8Array(21);
+  const view = new DataView(bytes.buffer);
+  let offset = 0;
+  view.setUint32(offset, 3_000, true);
+  offset += 4;
+  view.setUint16(offset, 15_000, true);
+  offset += 2;
+  view.setInt32(offset, 555_000_000, true);
+  offset += 4;
+  view.setInt32(offset, 102_500_000, true);
+  offset += 4;
+  view.setUint8(offset++, 4);
+  view.setUint8(offset++, 1);
+  view.setUint8(offset++, 0);
+  view.setInt32(offset, 42, true);
+
+  const taskData = `<?xml version="1.0" encoding="UTF-8"?>
+  <ISO11783_TaskData VersionMajor="4" VersionMinor="3">
+    <DVC A="DVC1" B="Machine">
+      <DET A="DET1" D="Working element"><DOR A="300"/></DET>
+      <DPD A="300" B="008D"/>
+    </DVC>
+    <TSK A="TSK1" B="Executed task" G="4">
+      <TLG A="TLG00001" B="21" C="1"/>
+    </TSK>
+  </ISO11783_TaskData>`;
+  const header = `<?xml version="1.0" encoding="UTF-8"?>
+  <TIM A="" D="4"><PTN A="" B="" D=""/><DLV A="008D" B="" C="DET1"/></TIM>`;
+
+  await mkdir(outputDir, { recursive: true });
+  await Promise.all([
+    writeFile(taskDataPath, taskData),
+    writeFile(headerPath, header),
+    writeFile(binaryPath, bytes),
+  ]);
+
+  return [taskDataPath, headerPath, binaryPath];
+}
+
 test("selects repeated-DDI products independently and traces a cell to bytes", async ({
   page,
 }) => {
@@ -169,20 +212,111 @@ test("uses one import control and keeps its label legible in light mode", async 
   );
 });
 
-test("exports the active decoded channel as CSV", async ({ page }) => {
+test("offers CSV and shapefile exports for the active planned channel", async ({ page }) => {
   await page.goto("/");
   await expect(
     page.getByRole("treeitem", { name: /DDI 0001 · AcidLine S/i }),
   ).toBeVisible();
 
-  const downloadPromise = page.waitForEvent("download");
   await page
     .getByRole("button", {
-      name: "Export selected data channel as CSV",
+      name: "Export selected data channel",
     })
     .click();
-  const download = await downloadPromise;
-  expect(download.suggestedFilename()).toMatch(/GRD00001-0001-PDT1\.csv/);
+  await expect(
+    page.getByRole("menuitem", { name: "Export selected data channel as CSV" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Export selected data channel as GeoJSON" }),
+  ).toBeVisible();
+
+  const csvDownloadPromise = page.waitForEvent("download");
+  await page
+    .getByRole("menuitem", { name: "Export selected data channel as CSV" })
+    .click();
+  const csvDownload = await csvDownloadPromise;
+  expect(csvDownload.suggestedFilename()).toMatch(/GRD00001-0001-PDT1\.csv/);
+
+  await page
+    .getByRole("button", {
+      name: "Export selected data channel",
+    })
+    .click();
+  const geoJsonDownloadPromise = page.waitForEvent("download");
+  await page
+    .getByRole("menuitem", { name: "Export selected data channel as GeoJSON" })
+    .click();
+  const geoJsonDownload = await geoJsonDownloadPromise;
+  expect(geoJsonDownload.suggestedFilename()).toMatch(/GRD00001-0001-PDT1\.geojson/);
+
+  await page
+    .getByRole("button", {
+      name: "Export selected data channel",
+    })
+    .click();
+  const shapeDownloadPromise = page.waitForEvent("download");
+  await page
+    .getByRole("menuitem", {
+      name: "Export selected data channel as Shapefile",
+    })
+    .click();
+  const shapeDownload = await shapeDownloadPromise;
+  expect(shapeDownload.suggestedFilename()).toMatch(/GRD00001-0001-PDT1\.zip/);
+});
+
+test("offers CSV, GeoJSON and shapefile exports for an executed channel", async ({ page }, testInfo) => {
+  const fixtureFiles = await createTimeLogFixtureFiles(testInfo.outputPath("timelog-fixture"));
+
+  await page.goto("/");
+  await page.locator('input[type="file"]').first().setInputFiles(fixtureFiles);
+  await expect(page.getByText("Selected ISOXML files").first()).toBeVisible();
+  await expect(page.getByText("Executed task").first()).toBeVisible();
+
+  await page
+    .getByRole("button", {
+      name: "Export selected data channel",
+    })
+    .click();
+  await expect(
+    page.getByRole("menuitem", { name: "Export selected data channel as CSV" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Export selected data channel as GeoJSON" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Export selected data channel as Shapefile" }),
+  ).toBeVisible();
+
+  const csvDownloadPromise = page.waitForEvent("download");
+  await page
+    .getByRole("menuitem", { name: "Export selected data channel as CSV" })
+    .click();
+  const csvDownload = await csvDownloadPromise;
+  expect(csvDownload.suggestedFilename()).toMatch(/TLG00001-008D-DET1\.csv/);
+
+  await page
+    .getByRole("button", {
+      name: "Export selected data channel",
+    })
+    .click();
+  const geoJsonDownloadPromise = page.waitForEvent("download");
+  await page
+    .getByRole("menuitem", { name: "Export selected data channel as GeoJSON" })
+    .click();
+  const geoJsonDownload = await geoJsonDownloadPromise;
+  expect(geoJsonDownload.suggestedFilename()).toMatch(/TLG00001-008D-DET1\.geojson/);
+
+  await page
+    .getByRole("button", {
+      name: "Export selected data channel",
+    })
+    .click();
+  const shapeDownloadPromise = page.waitForEvent("download");
+  await page
+    .getByRole("menuitem", { name: "Export selected data channel as Shapefile" })
+    .click();
+  const shapeDownload = await shapeDownloadPromise;
+  expect(shapeDownload.suggestedFilename()).toMatch(/TLG00001-008D-DET1\.zip/);
 });
 
 test("opens both workspace drawers at a narrow viewport", async ({ page }) => {
