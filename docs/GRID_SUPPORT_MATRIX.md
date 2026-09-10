@@ -1,19 +1,19 @@
 # Grid support matrix
 
-| Capability                      | Type 1      | Type 2 compact layout    |
-| ------------------------------- | ----------- | ------------------------ |
-| GRD metadata                    | raw         | typed                    |
-| Dimensions/origin/cell size     | structural  | validated and bounded    |
-| Treatment-zone lookup           | no          | channel declaration only |
-| Direct values                   | no          | Int32LE per ordered PDV  |
-| Multiple PDVs per cell          | no          | yes                      |
-| Repeated DDI/different product  | raw         | yes                      |
-| VPN scaling/raw preservation    | no          | yes                      |
-| Truncated/trailing bytes        | length only | complete-record recovery |
-| Canvas visualization            | no          | yes                      |
-| Cell hover/select/GPS pin/table | no          | yes                      |
-| CSV/Shapefile/GeoJSON           | no          | CSV UI; Shapefile UI; GeoJSON UI      |
-| Rotation                        | no          | no                       |
+| Capability                      | Type 1      | Type 2 compact layout            |
+| ------------------------------- | ----------- | -------------------------------- |
+| GRD metadata                    | raw         | typed                            |
+| Dimensions/origin/cell size     | structural  | validated and bounded            |
+| Treatment-zone lookup           | no          | channel declaration only         |
+| Direct values                   | no          | Int32LE per ordered PDV          |
+| Multiple PDVs per cell          | no          | yes                              |
+| Repeated DDI/different product  | raw         | yes                              |
+| VPN scaling/raw preservation    | no          | yes                              |
+| Truncated/trailing bytes        | length only | complete-record recovery         |
+| Canvas visualization            | no          | yes                              |
+| Cell hover/select/GPS pin/table | no          | yes                              |
+| CSV/Shapefile/GeoJSON           | no          | CSV UI; Shapefile UI; GeoJSON UI |
+| Rotation                        | no          | no                               |
 
 The Type 2 row describes the explicit layout in `BINARY_DECODING_NOTES.md`, not universal ISOXML Type 2 conformance.
 

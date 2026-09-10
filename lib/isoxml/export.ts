@@ -1,5 +1,4 @@
 import { zip as zipShapefile } from "@mapbox/shp-write";
-import { decodeValue } from "./value-decoder";
 import { geographicCellBounds, geographicCellCenter } from "./spatial";
 import type {
   DecodedGrid,
@@ -8,6 +7,7 @@ import type {
   IsoXmlDataset,
   TimeLogChannel,
 } from "./types";
+import { decodeValue } from "./value-decoder";
 
 function escapeCsv(value: unknown): string {
   const string = String(value ?? "");

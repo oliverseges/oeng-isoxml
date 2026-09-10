@@ -133,6 +133,7 @@ function scaleDescription(classification: ValueClassification): string {
 function fieldBoundaryForGrid(
   dataset: IsoXmlDataset,
   grid: DecodedGrid,
+  activeBoundaryId?: string,
 ): SpatialBoundary | undefined {
   const task = dataset.tasks.find(
     (candidate) => candidate.instanceId === grid.taskInstanceId,
@@ -146,6 +147,10 @@ function fieldBoundaryForGrid(
     taskObject?.attributes.PartFieldIdRef;
 
   return (
+    dataset.boundaries.find(
+      (boundary) =>
+        boundary.id === activeBoundaryId && boundary.taskId === grid.taskId,
+    ) ??
     dataset.boundaries.find((boundary) => boundary.taskId === grid.taskId) ??
     dataset.boundaries.find((boundary) => boundary.id === fieldId) ??
     (dataset.boundaries.length === 1 ? dataset.boundaries[0] : undefined)
@@ -377,12 +382,13 @@ export function MapWorkspace({ dataset, grid, channel }: MapWorkspaceProps) {
   const setHideOutliers = useViewerStore((state) => state.setHideOutliers);
   const clipToField = useViewerStore((state) => state.clipToField);
   const setClipToField = useViewerStore((state) => state.setClipToField);
+  const activeBoundaryId = useViewerStore((state) => state.activeBoundaryId);
   const mapFitNonce = useViewerStore((state) => state.mapFitNonce);
   const initialBaseLayerRef = useRef(baseLayer);
   const spatiallyValid = isSpatialGridValid(grid);
   const fieldBoundary = useMemo(
-    () => fieldBoundaryForGrid(dataset, grid),
-    [dataset, grid],
+    () => fieldBoundaryForGrid(dataset, grid, activeBoundaryId),
+    [activeBoundaryId, dataset, grid],
   );
   const fieldClipActive = clipToField && Boolean(fieldBoundary);
   const activeDisplayFilterCount =

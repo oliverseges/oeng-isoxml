@@ -1,12 +1,12 @@
-import JSZip from "jszip";
-import { describe, expect, it } from "vitest";
-import { analyzePackageTransform } from "@/lib/isoxml/package-transform";
-import { buildDataset } from "@/lib/isoxml/pipeline";
-import { redecodeDatasetTimeLog } from "@/lib/isoxml/timelog-adapters";
 import {
   timeLogChannelGeoJson,
   timeLogChannelShapefileZip,
 } from "@/lib/isoxml/export";
+import { analyzePackageTransform } from "@/lib/isoxml/package-transform";
+import { buildDataset } from "@/lib/isoxml/pipeline";
+import { redecodeDatasetTimeLog } from "@/lib/isoxml/timelog-adapters";
+import JSZip from "jszip";
+import { describe, expect, it } from "vitest";
 
 function arrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.slice().buffer;
@@ -118,7 +118,11 @@ describe("time-log package pipeline", () => {
     expect(accepted.warnings[0]).toContain("HIGH RISK");
 
     const geoJson = JSON.parse(
-      timeLogChannelGeoJson(dataset, dataset.timeLogs[0], dataset.timeLogs[0].channels[0]),
+      timeLogChannelGeoJson(
+        dataset,
+        dataset.timeLogs[0],
+        dataset.timeLogs[0].channels[0],
+      ),
     );
     const shapefileZip = await JSZip.loadAsync(
       await (

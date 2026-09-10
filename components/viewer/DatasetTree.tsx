@@ -76,6 +76,7 @@ type TreeNode = {
   taskInstanceId?: string;
   channelId?: string;
   timeLogChannelId?: string;
+  boundaryId?: string;
   warning?: boolean;
   parentId?: string;
   spatial?: boolean;
@@ -148,6 +149,7 @@ export function DatasetTree({
   const scrollRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const activeChannelId = useViewerStore((state) => state.activeChannelId);
+  const activeBoundaryId = useViewerStore((state) => state.activeBoundaryId);
   const activeGridInstanceId = useViewerStore(
     (state) => state.activeGridInstanceId,
   );
@@ -158,6 +160,7 @@ export function DatasetTree({
     (state) => state.activeTimeLogInstanceId,
   );
   const setActiveChannel = useViewerStore((state) => state.setActiveChannel);
+  const setActiveBoundary = useViewerStore((state) => state.setActiveBoundary);
   const setActiveTimeLogChannel = useViewerStore(
     (state) => state.setActiveTimeLogChannel,
   );
@@ -505,6 +508,38 @@ export function DatasetTree({
         taskInstanceId: task.instanceId,
         spatial: true,
       });
+      const importedBoundaries = dataset.boundaries.filter(
+        (boundary) =>
+          boundary.taskId === task.id &&
+          boundary.sourceObjectUid.startsWith("shape:"),
+      );
+      if (importedBoundaries.length) {
+        next.push({
+          id: `boundaries:${task.instanceId}`,
+          label: "Boundary overlays",
+          meta: String(importedBoundaries.length),
+          depth: 3,
+          kind: "section",
+          parentId: `task:${task.instanceId}`,
+          taskInstanceId: task.instanceId,
+          spatial: true,
+        });
+        importedBoundaries.forEach((boundary, index) => {
+          next.push({
+            id: `boundary:${task.instanceId}:${boundary.id}:${index}`,
+            label: boundary.name,
+            meta: `${boundary.coordinates.length} points`,
+            depth: 4,
+            kind: "map",
+            parentId: `boundaries:${task.instanceId}`,
+            taskInstanceId: task.instanceId,
+            boundaryId: boundary.id,
+            spatial: true,
+            hoverLabel:
+              "Imported shapefile boundary overlay. Click to use this overlay for clipping and map fitting.",
+          });
+        });
+      }
       next.push({
         id: `planned:${task.instanceId}`,
         label: "Planned data",
@@ -876,6 +911,31 @@ export function DatasetTree({
       requestMapFit();
       return;
     }
+    if (node.boundaryId) {
+      const task = dataset.tasks.find(
+        (candidate) => candidate.instanceId === node.taskInstanceId,
+      );
+      setActiveBoundary(node.boundaryId, task?.id);
+      const grid = dataset.grids.find(
+        (candidate) => candidate.taskInstanceId === node.taskInstanceId,
+      );
+      const channel = grid?.channels[0];
+      if (grid && channel) {
+        setActiveChannel(grid.instanceId, channel.channelId);
+      } else {
+        const timeLog = (dataset.timeLogs ?? []).find(
+          (candidate) => candidate.taskInstanceId === node.taskInstanceId,
+        );
+        const timeLogChannel = timeLog?.channels[0];
+        if (timeLog && timeLogChannel) {
+          setActiveTimeLogChannel(timeLog.instanceId, timeLogChannel.channelId);
+        } else if (timeLog) {
+          setActiveTimeLog(timeLog.instanceId);
+        }
+      }
+      requestMapFit();
+      return;
+    }
     if (node.kind === "grid" && node.gridInstanceId) {
       if (
         !treeContainerNeedsActivation(node.gridInstanceId, activeGridInstanceId)
@@ -1163,6 +1223,7 @@ export function DatasetTree({
                   activeChannelId,
                   activeTimeLogChannelId,
                 ) ||
+                (Boolean(node.boundaryId) && node.boundaryId === activeBoundaryId) ||
                 (node.kind === "timelog" &&
                   !activeTimeLogChannelId &&
                   node.timeLogInstanceId === activeTimeLogInstanceId);

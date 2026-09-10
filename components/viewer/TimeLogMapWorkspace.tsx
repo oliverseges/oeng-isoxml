@@ -105,6 +105,7 @@ function traceBoundary(
 function fieldBoundaryForTimeLog(
   dataset: IsoXmlDataset,
   timeLog: DecodedTimeLog,
+  activeBoundaryId?: string,
 ): SpatialBoundary | undefined {
   const task = dataset.tasks.find(
     (candidate) => candidate.instanceId === timeLog.taskInstanceId,
@@ -118,6 +119,10 @@ function fieldBoundaryForTimeLog(
     taskObject?.attributes.PartFieldIdRef;
 
   return (
+    dataset.boundaries.find(
+      (boundary) =>
+        boundary.id === activeBoundaryId && boundary.taskId === timeLog.taskId,
+    ) ??
     dataset.boundaries.find((boundary) => boundary.taskId === timeLog.taskId) ??
     dataset.boundaries.find((boundary) => boundary.id === fieldId) ??
     (dataset.boundaries.length === 1 ? dataset.boundaries[0] : undefined)
@@ -325,13 +330,14 @@ export function TimeLogMapWorkspace({
   const setHideOutliers = useViewerStore((state) => state.setHideOutliers);
   const clipToField = useViewerStore((state) => state.clipToField);
   const setClipToField = useViewerStore((state) => state.setClipToField);
+  const activeBoundaryId = useViewerStore((state) => state.activeBoundaryId);
   const mapFitNonce = useViewerStore((state) => state.mapFitNonce);
   const channelIndex = timeLog.channels.findIndex(
     (candidate) => candidate.channelId === channel.channelId,
   );
   const fieldBoundary = useMemo(
-    () => fieldBoundaryForTimeLog(dataset, timeLog),
-    [dataset, timeLog],
+    () => fieldBoundaryForTimeLog(dataset, timeLog, activeBoundaryId),
+    [activeBoundaryId, dataset, timeLog],
   );
   const fieldClipActive = clipToField && Boolean(fieldBoundary);
   const activeDisplayFilterCount =

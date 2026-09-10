@@ -18,6 +18,7 @@ interface ViewerState {
   datasetId?: string;
   recentDatasetIds: string[];
   activeTaskId?: string;
+  activeBoundaryId?: string;
   activeLayerKind?: "grid" | "timelog";
   activeGridInstanceId?: string;
   activeChannelId?: string;
@@ -49,6 +50,10 @@ interface ViewerState {
     channelId: string,
   ) => void;
   setActiveTimeLog: (timeLogInstanceId: string) => void;
+  setActiveBoundary: (
+    boundaryId: string | undefined,
+    taskId?: string,
+  ) => void;
   setSelectedCell: (cellIndex: number | undefined) => void;
   setHoveredCell: (cellIndex: number | undefined) => void;
   setBottomTab: (tab: BottomTab) => void;
@@ -105,6 +110,7 @@ export const useViewerStore = create<ViewerState>()(
               ].slice(0, 10)
             : state.recentDatasetIds,
           activeTaskId: dataset.tasks[0]?.id,
+          activeBoundaryId: undefined,
           activeLayerKind: firstGrid
             ? "grid"
             : firstTimeLog
@@ -139,6 +145,7 @@ export const useViewerStore = create<ViewerState>()(
         set({
           datasetId,
           activeTaskId: dataset.tasks[0]?.id,
+          activeBoundaryId: undefined,
           activeLayerKind: firstGrid
             ? "grid"
             : firstTimeLog
@@ -167,6 +174,8 @@ export const useViewerStore = create<ViewerState>()(
       setActiveChannel: (gridInstanceId, channelId) =>
         set((state) => ({
           activeLayerKind: "grid",
+          activeTaskId: state.activeTaskId,
+          activeBoundaryId: state.activeBoundaryId,
           activeGridInstanceId: gridInstanceId,
           activeChannelId: channelId,
           activeTimeLogInstanceId: undefined,
@@ -179,6 +188,8 @@ export const useViewerStore = create<ViewerState>()(
       setActiveTimeLogChannel: (timeLogInstanceId, channelId) =>
         set((state) => ({
           activeLayerKind: "timelog",
+          activeTaskId: state.activeTaskId,
+          activeBoundaryId: state.activeBoundaryId,
           activeGridInstanceId: undefined,
           activeChannelId: undefined,
           activeTimeLogInstanceId: timeLogInstanceId,
@@ -192,6 +203,8 @@ export const useViewerStore = create<ViewerState>()(
       setActiveTimeLog: (timeLogInstanceId) =>
         set((state) => ({
           activeLayerKind: "timelog",
+          activeTaskId: state.activeTaskId,
+          activeBoundaryId: state.activeBoundaryId,
           activeGridInstanceId: undefined,
           activeChannelId: undefined,
           activeTimeLogInstanceId: timeLogInstanceId,
@@ -202,6 +215,8 @@ export const useViewerStore = create<ViewerState>()(
           bottomCollapsed: false,
           bottomAttentionNonce: state.bottomAttentionNonce + 1,
         })),
+      setActiveBoundary: (activeBoundaryId, activeTaskId) =>
+        set({ activeBoundaryId, activeTaskId }),
       setSelectedCell: (selectedCellIndex) => set({ selectedCellIndex }),
       setHoveredCell: (hoveredCellIndex) => set({ hoveredCellIndex }),
       setBottomTab: (bottomTab) =>

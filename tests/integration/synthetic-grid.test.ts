@@ -1,8 +1,13 @@
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-import fc from "fast-check";
-import JSZip from "jszip";
-import { describe, expect, it } from "vitest";
+import { zip as zipShapefile } from "@mapbox/shp-write";
+import {
+  gridChannelCsv,
+  gridChannelGeoJson,
+  gridChannelShapefileZip,
+} from "@/lib/isoxml/export";
+import {
+  importShapefileOverlay,
+  importShapefileOverlayFiles,
+} from "@/lib/isoxml/shapefile-import";
 import {
   analyzePackageTransform,
   mergeTaskCompatibilityIssues,
@@ -15,11 +20,11 @@ import {
 } from "@/lib/isoxml/spatial";
 import type { IsoXmlDataset, ValidationIssue } from "@/lib/isoxml/types";
 import { decodeValue } from "@/lib/isoxml/value-decoder";
-import {
-  gridChannelCsv,
-  gridChannelGeoJson,
-  gridChannelShapefileZip,
-} from "@/lib/isoxml/export";
+import fc from "fast-check";
+import JSZip from "jszip";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
 
 const fixtureRoot = new URL("../../public/demo/", import.meta.url);
 
@@ -181,7 +186,9 @@ describe("synthetic multi-PDV Type 2 vertical slice", () => {
     const csv = gridChannelCsv(grid, channel);
     const geoJson = JSON.parse(gridChannelGeoJson(dataset, grid, channel));
     const shapefileZip = await JSZip.loadAsync(
-      await (await gridChannelShapefileZip(dataset, grid, channel)).arrayBuffer(),
+      await (
+        await gridChannelShapefileZip(dataset, grid, channel)
+      ).arrayBuffer(),
     );
 
     expect(csv.split("\r\n")).toHaveLength(grid.decodedCellCount + 1);
@@ -202,6 +209,111 @@ describe("synthetic multi-PDV Type 2 vertical slice", () => {
     expect(() =>
       gridChannelCsv(grid, { ...channel, channelId: "missing" }),
     ).toThrow(/does not belong/);
+  });
+
+  it("imports a zipped polygon shapefile as a boundary overlay on the current dataset", async () => {
+    const dataset = await buildDataset(await fixtureFiles(), "test fixture");
+    const grid = dataset.grids[0];
+    const zipBytes = await zipShapefile<"nodebuffer">(
+      {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { name: "Overlay boundary" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [10.0, 55.0],
+                  [10.1, 55.0],
+                  [10.1, 55.1],
+                  [10.0, 55.1],
+                  [10.0, 55.0],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+      {
+        compression: "DEFLATE",
+        outputType: "nodebuffer",
+        filename: "overlay-boundary",
+        types: { polygon: "overlay-boundary" },
+      },
+    );
+
+    const nextDataset = await importShapefileOverlay(
+      dataset,
+      "overlay-boundary.zip",
+      new Uint8Array(zipBytes),
+      grid.taskId,
+    );
+
+    expect(nextDataset).toBeDefined();
+    expect(nextDataset?.boundaries[0].name).toBe("Overlay boundary");
+    expect(nextDataset?.boundaries[0].taskId).toBe(grid.taskId);
+    expect(nextDataset?.boundaries[0].coordinates[0]).toEqual([55, 10]);
+    expect(nextDataset?.files[0].filename).toBe("overlay-boundary.zip");
+    expect(
+      nextDataset?.issues.some(
+        (entry) => entry.code === "SHAPEFILE_OVERLAY_IMPORTED",
+      ),
+    ).toBe(true);
+  });
+
+  it("imports loose shapefile sidecar files as a boundary overlay on the current dataset", async () => {
+    const dataset = await buildDataset(await fixtureFiles(), "test fixture");
+    const grid = dataset.grids[0];
+    const zipBytes = await zipShapefile<"nodebuffer">(
+      {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { name: "Loose overlay boundary" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [10.2, 55.2],
+                  [10.3, 55.2],
+                  [10.3, 55.3],
+                  [10.2, 55.3],
+                  [10.2, 55.2],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+      {
+        compression: "DEFLATE",
+        outputType: "nodebuffer",
+        filename: "loose-overlay-boundary",
+        types: { polygon: "loose-overlay-boundary" },
+      },
+    );
+    const archive = await JSZip.loadAsync(zipBytes);
+    const files = await Promise.all(
+      Object.values(archive.files)
+        .filter((entry) => !entry.dir)
+        .map(async (entry) => ({
+          name: entry.name,
+          bytes: await entry.async("uint8array"),
+        })),
+    );
+
+    const nextDataset = await importShapefileOverlayFiles(
+      dataset,
+      files,
+      grid.taskId,
+    );
+
+    expect(nextDataset).toBeDefined();
+    expect(nextDataset?.boundaries[0].name).toBe("Loose overlay boundary");
+    expect(nextDataset?.files[0].filename).toBe("loose-overlay-boundary.zip");
   });
 
   it("reports a truncated binary while keeping complete records", async () => {

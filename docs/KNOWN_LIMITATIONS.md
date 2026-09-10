@@ -11,6 +11,7 @@ The shipped version is a production-quality vertical slice, not a complete ISOXM
 - The bundled DDI dictionary is generated from the public ISOBUS online database and currently includes all 765 entries from version 2026050501. Run `pnpm ddi:sync` to refresh names, definitions, units, ranges, bit resolutions, device classes, statuses and official record links.
 - Device objects are visible and core references resolve, but the interactive device node graph is not implemented.
 - ZIP import enforces aggregate retained-data limits but JSZip materializes an entry before the viewer knows its actual expanded size. Compression-ratio evidence is not exposed per entry.
+- Shapefile import is limited to one polygon boundary overlay attached to an already open ISOXML dataset, either from a ZIP or from one loose `.shp + .dbf + .shx` set. Additional polygons, holes, multipolygon parts and non-polygon features are ignored with a warning, and standalone shapefile-only workspaces are not supported.
 - Direct multi-file selection is supported; a browser directory/folder picker is not currently exposed.
 - Imports run in a dedicated worker, but there is no user-facing cancel action after a read has started.
 - Exact raw XML and bytes are retained. The parsed object index does not model comments, processing instructions or exact mixed-text placement.

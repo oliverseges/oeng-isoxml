@@ -1,8 +1,9 @@
+import { zip as zipShapefile } from "@mapbox/shp-write";
+import { expect, test } from "@playwright/test";
+import JSZip from "jszip";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, test } from "@playwright/test";
-import JSZip from "jszip";
 
 const fixtureRoot = fileURLToPath(
   new URL("../../public/demo/", import.meta.url),
@@ -61,6 +62,57 @@ async function createTimeLogFixtureFiles(outputDir: string) {
   ]);
 
   return [taskDataPath, headerPath, binaryPath];
+}
+
+async function createBoundaryShapefileZip(outputPath: string) {
+  const zipBytes = await zipShapefile<"nodebuffer">(
+    {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { name: "Overlay boundary" },
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [10.0, 55.0],
+                [10.1, 55.0],
+                [10.1, 55.1],
+                [10.0, 55.1],
+                [10.0, 55.0],
+              ],
+            ],
+          },
+        },
+      ],
+    },
+    {
+      compression: "DEFLATE",
+      outputType: "nodebuffer",
+      filename: "overlay-boundary",
+      types: { polygon: "overlay-boundary" },
+    },
+  );
+
+  await mkdir(path.dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, zipBytes);
+}
+
+async function createBoundaryShapefileParts(outputDir: string) {
+  const zipPath = path.join(outputDir, "loose-overlay-boundary.zip");
+  await createBoundaryShapefileZip(zipPath);
+  const archive = await JSZip.loadAsync(await readFile(zipPath));
+  const files = await Promise.all(
+    Object.values(archive.files)
+      .filter((entry) => !entry.dir)
+      .map(async (entry) => {
+        const outputPath = path.join(outputDir, entry.name);
+        await writeFile(outputPath, await entry.async("nodebuffer"));
+        return outputPath;
+      }),
+  );
+  return files;
 }
 
 test("selects repeated-DDI products independently and traces a cell to bytes", async ({
@@ -212,7 +264,9 @@ test("uses one import control and keeps its label legible in light mode", async 
   );
 });
 
-test("offers CSV and shapefile exports for the active planned channel", async ({ page }) => {
+test("offers CSV and shapefile exports for the active planned channel", async ({
+  page,
+}) => {
   await page.goto("/");
   await expect(
     page.getByRole("treeitem", { name: /DDI 0001 · AcidLine S/i }),
@@ -227,7 +281,9 @@ test("offers CSV and shapefile exports for the active planned channel", async ({
     page.getByRole("menuitem", { name: "Export selected data channel as CSV" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("menuitem", { name: "Export selected data channel as GeoJSON" }),
+    page.getByRole("menuitem", {
+      name: "Export selected data channel as GeoJSON",
+    }),
   ).toBeVisible();
 
   const csvDownloadPromise = page.waitForEvent("download");
@@ -247,7 +303,9 @@ test("offers CSV and shapefile exports for the active planned channel", async ({
     .getByRole("menuitem", { name: "Export selected data channel as GeoJSON" })
     .click();
   const geoJsonDownload = await geoJsonDownloadPromise;
-  expect(geoJsonDownload.suggestedFilename()).toMatch(/GRD00001-0001-PDT1\.geojson/);
+  expect(geoJsonDownload.suggestedFilename()).toMatch(
+    /GRD00001-0001-PDT1\.geojson/,
+  );
 
   await page
     .getByRole("button", {
@@ -264,8 +322,12 @@ test("offers CSV and shapefile exports for the active planned channel", async ({
   expect(shapeDownload.suggestedFilename()).toMatch(/GRD00001-0001-PDT1\.zip/);
 });
 
-test("offers CSV, GeoJSON and shapefile exports for an executed channel", async ({ page }, testInfo) => {
-  const fixtureFiles = await createTimeLogFixtureFiles(testInfo.outputPath("timelog-fixture"));
+test("offers CSV, GeoJSON and shapefile exports for an executed channel", async ({
+  page,
+}, testInfo) => {
+  const fixtureFiles = await createTimeLogFixtureFiles(
+    testInfo.outputPath("timelog-fixture"),
+  );
 
   await page.goto("/");
   await page.locator('input[type="file"]').first().setInputFiles(fixtureFiles);
@@ -281,10 +343,14 @@ test("offers CSV, GeoJSON and shapefile exports for an executed channel", async 
     page.getByRole("menuitem", { name: "Export selected data channel as CSV" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("menuitem", { name: "Export selected data channel as GeoJSON" }),
+    page.getByRole("menuitem", {
+      name: "Export selected data channel as GeoJSON",
+    }),
   ).toBeVisible();
   await expect(
-    page.getByRole("menuitem", { name: "Export selected data channel as Shapefile" }),
+    page.getByRole("menuitem", {
+      name: "Export selected data channel as Shapefile",
+    }),
   ).toBeVisible();
 
   const csvDownloadPromise = page.waitForEvent("download");
@@ -304,7 +370,9 @@ test("offers CSV, GeoJSON and shapefile exports for an executed channel", async 
     .getByRole("menuitem", { name: "Export selected data channel as GeoJSON" })
     .click();
   const geoJsonDownload = await geoJsonDownloadPromise;
-  expect(geoJsonDownload.suggestedFilename()).toMatch(/TLG00001-008D-DET1\.geojson/);
+  expect(geoJsonDownload.suggestedFilename()).toMatch(
+    /TLG00001-008D-DET1\.geojson/,
+  );
 
   await page
     .getByRole("button", {
@@ -313,10 +381,55 @@ test("offers CSV, GeoJSON and shapefile exports for an executed channel", async 
     .click();
   const shapeDownloadPromise = page.waitForEvent("download");
   await page
-    .getByRole("menuitem", { name: "Export selected data channel as Shapefile" })
+    .getByRole("menuitem", {
+      name: "Export selected data channel as Shapefile",
+    })
     .click();
   const shapeDownload = await shapeDownloadPromise;
   expect(shapeDownload.suggestedFilename()).toMatch(/TLG00001-008D-DET1\.zip/);
+});
+
+test("imports a zipped shapefile as a boundary overlay on the current dataset", async ({
+  page,
+}, testInfo) => {
+  const shapefileZip = testInfo.outputPath("overlay-boundary.zip");
+  await createBoundaryShapefileZip(shapefileZip);
+
+  await page.goto("/");
+  await expect(
+    page.getByRole("treeitem", { name: /DDI 0001 · AcidLine S/i }),
+  ).toBeVisible();
+
+  await page.locator('input[type="file"]').first().setInputFiles([shapefileZip]);
+  const boundaryOverlay = page.getByRole("treeitem", { name: /Overlay boundary.*points/i });
+  await expect(boundaryOverlay).toBeVisible();
+  await boundaryOverlay.click();
+  await expect(boundaryOverlay).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("tab", { name: /Files/i }).click();
+  await expect(page.getByText("overlay-boundary.zip").first()).toBeVisible();
+  await page.getByRole("tab", { name: /Issues/i }).click();
+  await expect(
+    page.getByText(/Imported shapefile boundary overlay Overlay boundary/i),
+  ).toBeVisible();
+});
+
+test("imports loose shapefile sidecar files as a boundary overlay", async ({
+  page,
+}, testInfo) => {
+  const shapefileParts = await createBoundaryShapefileParts(
+    testInfo.outputPath("loose-boundary"),
+  );
+
+  await page.goto("/");
+  await expect(
+    page.getByRole("treeitem", { name: /DDI 0001 · AcidLine S/i }),
+  ).toBeVisible();
+
+  await page.locator('input[type="file"]').first().setInputFiles(shapefileParts);
+  await page.getByRole("tab", { name: /Files/i }).click();
+  await expect(
+    page.getByText("overlay-boundary.zip").first(),
+  ).toBeVisible();
 });
 
 test("opens both workspace drawers at a narrow viewport", async ({ page }) => {

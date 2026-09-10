@@ -1,56 +1,57 @@
 "use client";
 
 import {
-  type CSSProperties,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
-import {
-  ChevronLeft,
-  ChevronRight,
-  DatabaseZap,
-  LoaderCircle,
-  UploadCloud,
-} from "lucide-react";
-import {
-  downloadBlob,
-  downloadText,
-  gridChannelCsv,
-  gridChannelGeoJson,
-  gridChannelShapefileZip,
-  timeLogChannelGeoJson,
-  timeLogChannelCsv,
-  timeLogChannelShapefileZip,
+    downloadBlob,
+    downloadText,
+    gridChannelCsv,
+    gridChannelGeoJson,
+    gridChannelShapefileZip,
+    timeLogChannelCsv,
+    timeLogChannelGeoJson,
+    timeLogChannelShapefileZip,
 } from "@/lib/isoxml/export";
 import {
-  applyTimeLogAdapter as applyTimeLogAdapterInWorker,
-  importIsoXmlFiles,
-  loadSyntheticDemo,
-  type ImportProgress,
+    applyTimeLogAdapter as applyTimeLogAdapterInWorker,
+    importIsoXmlFiles,
+    loadSyntheticDemo,
+    type ImportProgress,
 } from "@/lib/isoxml/import-client";
+import { importShapefileOverlayFiles } from "@/lib/isoxml/shapefile-import";
 import {
-  createTransformedPackage,
-  type PackageTransformPlan,
+    createTransformedPackage,
+    type PackageTransformPlan,
 } from "@/lib/isoxml/package-transform";
 import { datasetRepository } from "@/lib/isoxml/repository";
 import type { IsoXmlDataset } from "@/lib/isoxml/types";
+import {
+    ChevronLeft,
+    ChevronRight,
+    DatabaseZap,
+    LoaderCircle,
+    UploadCloud,
+} from "lucide-react";
+import {
+    useCallback,
+    useEffect,
+    useRef,
+    useState,
+    type CSSProperties,
+    type KeyboardEvent as ReactKeyboardEvent,
+    type PointerEvent as ReactPointerEvent,
+} from "react";
 import { BottomPanel } from "./BottomPanel";
 import { DatasetTree } from "./DatasetTree";
 import { Inspector } from "./Inspector";
 import { MapWorkspace } from "./MapWorkspace";
-import type { ExportAction } from "./TopBar";
-import { TimeLogInspector } from "./TimeLogInspector";
-import { TimeLogAdapterWorkspace } from "./TimeLogAdapterControl";
-import { TimeLogMapWorkspace } from "./TimeLogMapWorkspace";
 import { currentDataset, useViewerStore } from "./store";
+import { TimeLogAdapterWorkspace } from "./TimeLogAdapterControl";
+import { TimeLogInspector } from "./TimeLogInspector";
+import { TimeLogMapWorkspace } from "./TimeLogMapWorkspace";
+import type { ExportAction } from "./TopBar";
 import { TopBar } from "./TopBar";
 import {
-  TransformPackageDialog,
-  type VariantCreationAction,
+    TransformPackageDialog,
+    type VariantCreationAction,
 } from "./TransformPackageDialog";
 
 type PanelName = "left" | "right" | "bottom";
@@ -191,6 +192,56 @@ export function ViewerApp() {
     }
   };
 
+  const tryImportShapefileOverlay = async (files: File[]): Promise<boolean> => {
+    if (
+      !files.some((file) => /\.(zip|shp|dbf|shx|prj|cpg)$/i.test(file.name))
+    ) {
+      return false;
+    }
+
+    setImportError(undefined);
+    setProgress({
+      stage: "reading",
+      progress: 0.04,
+      detail: "Inspecting shapefile inputs",
+    });
+
+    const inputs = await Promise.all(
+      files.map(async (file) => ({
+        name: file.name,
+        bytes: new Uint8Array(await file.arrayBuffer()),
+      })),
+    );
+
+    try {
+      const nextDataset = await importShapefileOverlayFiles(
+        dataset,
+        inputs,
+        activeGrid?.taskId ?? activeTimeLog?.taskId ?? dataset?.tasks[0]?.id,
+      );
+      if (!nextDataset) {
+        setProgress(undefined);
+        return false;
+      }
+
+      setProgress({
+        stage: "spatial",
+        progress: 0.84,
+        detail: "Attaching shapefile boundary overlay",
+      });
+      applyDataset(nextDataset, true);
+      return true;
+    } catch (error) {
+      setProgress(undefined);
+      setImportError(
+        error instanceof Error
+          ? error.message
+          : "The shapefile overlay could not be imported.",
+      );
+      return true;
+    }
+  };
+
   useEffect(() => {
     shellRef.current?.setAttribute("data-interactive", "true");
   }, []);
@@ -251,17 +302,23 @@ export function ViewerApp() {
   const onFiles = (files: FileList | null, label: string) => {
     if (!files?.length) return;
     const selectedFiles = [...files];
-    const zipFiles = selectedFiles.filter((file) =>
-      file.name.toLowerCase().endsWith(".zip"),
-    );
-    if (zipFiles.length > 1) {
-      setPendingZipFiles(selectedFiles);
-      return;
-    }
-    void runImport(
-      selectedFiles,
-      selectedFiles.length === 1 ? selectedFiles[0].name : label,
-    );
+    void (async () => {
+      if (await tryImportShapefileOverlay(selectedFiles)) {
+        return;
+      }
+
+      const zipFiles = selectedFiles.filter((file) =>
+        file.name.toLowerCase().endsWith(".zip"),
+      );
+      if (zipFiles.length > 1) {
+        setPendingZipFiles(selectedFiles);
+        return;
+      }
+      await runImport(
+        selectedFiles,
+        selectedFiles.length === 1 ? selectedFiles[0].name : label,
+      );
+    })();
   };
 
   const importZipFilesSeparately = async (files: File[]) => {

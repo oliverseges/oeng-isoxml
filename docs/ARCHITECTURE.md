@@ -59,6 +59,8 @@ lightweight UI state → cached raster/batched Leaflet canvas + inspector/table
 
 `ArrayBuffer` inputs and decoded typed arrays are transferred rather than cloned. Imports use a fresh worker that is terminated after success or failure. A manual time-log adapter change uses a separate short-lived worker and retains the original source unchanged. User-triggered cancellation is not implemented. Imported strings are rendered as text only. External entities, DTDs, archive traversal and oversized retained data are rejected.
 
+Single shapefile overlay uploads are handled on the main thread before the ISOXML worker path. The viewer accepts either one ZIP containing a shapefile or one loose `.shp + .dbf + .shx` set, converts the latter to an in-memory ZIP, and attaches the first usable polygon to the current dataset as a boundary overlay. Imported overlays are preserved in the file manifest and exposed in the task tree so the user can choose which overlay drives clipping and map fit. Standalone shapefile datasets are intentionally out of scope.
+
 ## Package variant flow
 
 ```text

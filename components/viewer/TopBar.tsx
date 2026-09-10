@@ -1,19 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import {
-  Check,
-  ChevronDown,
-  Download,
-  Import,
-  Moon,
-  ShieldAlert,
-  ShieldCheck,
-  Sparkles,
-  Sun,
-  Trash2,
-} from "lucide-react";
 import type { IsoXmlDataset } from "@/lib/isoxml/types";
+import {
+    Check,
+    ChevronDown,
+    Download,
+    Import,
+    Moon,
+    ShieldAlert,
+    ShieldCheck,
+    Sparkles,
+    Sun,
+    Trash2,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 export interface ExportAction {
   id: string;
@@ -249,8 +249,8 @@ export function TopBar({
             className="import-file-input"
             type="file"
             multiple
-            accept=".xml,.bin,.zip,application/zip,application/xml"
-            aria-label="Import ISOXML files"
+            accept=".xml,.bin,.zip,.shp,.dbf,.shx,.prj,.cpg,application/zip,application/xml"
+            aria-label="Import ISOXML files or a zipped shapefile overlay"
             onClick={(event) => {
               event.currentTarget.value = "";
             }}
